@@ -1,0 +1,210 @@
+/** TUI command-line provider for the `deepseek` product entry. */
+
+import { spawn } from 'node:child_process'
+import { realpathSync, unlinkSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { Command } from 'commander'
+import type { Context } from '@deepseek-ai/cordis'
+import { parseCmdline } from '@deepseek-ai/dsh-cmdline'
+import { localeFromEnvironment, setUiLocale, ui } from '../client/locale.ts'
+import { APP_HANDOFF_ENV, consumeAppHandoff, restartChildEnv, writeAppHandoff } from './app-handoff.ts'
+import { ProfilePluginManager } from './profile-plugin-manager.ts'
+import { readRestartHandoff, reconcileHandoff } from './restart-handoff.ts'
+
+/** Stable Cordis plugin name. */
+export const name = 'tui-startup'
+
+/** Services required before launch values can be resolved. */
+export const inject = ['cmdlineArgs']
+
+/** Service provided to the Host-to-Client TUI runner. */
+export const TUI_STARTUP_SERVICE = 'tuiStartup'
+
+/** Immutable invocation values consumed by the terminal surface. */
+export interface TuiStartupValues {
+  /** Launcher-selected Profile name. */
+  readonly profile: string
+  /** Absolute workspace path for a new session. */
+  readonly cwd: string
+  /** Explicit session id, or `true` for the most recent visible session. */
+  readonly resume?: string | true
+  /** Optional initial prompt. */
+  readonly task?: string
+  readonly draft?: string
+  readonly attachmentPaths?: readonly string[]
+  readonly startupNotice?: string
+}
+
+interface TuiOptions {
+  cwd?: string
+  resume?: string | boolean
+}
+
+interface AppRestartRequest {
+  readonly profile: string
+  readonly args: readonly string[]
+  readonly handoff?: {
+    readonly channel: string
+    readonly payload: unknown
+  }
+}
+
+type AppRestart = (request: AppRestartRequest) => Promise<void>
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Native Profile manager supplied by this out-of-tree Bundle. */
+    profilePluginManager?: ProfilePluginManager
+    /** Controlled replacement of the current stock dsh process. */
+    appRestart?: AppRestart
+  }
+}
+
+function activeProfile(argv: readonly string[] = process.argv.slice(2)): string {
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index]
+    if (argument === '--profile') {
+      const value = argv[index + 1]
+      if (value !== undefined && value.trim() !== '') return value
+    }
+    if (argument?.startsWith('--profile=') === true) {
+      const value = argument.slice('--profile='.length)
+      if (value !== '') return value
+    }
+  }
+  throw new Error(ui(
+    'TUI Bundle 必须通过 dsh --profile <name> 启动',
+    'The TUI Bundle must be started through dsh --profile <name>',
+  ))
+}
+
+function dshInstallAnchor(): string {
+  const entry = process.argv[1]
+  if (entry === undefined) throw new Error(ui(
+    '无法定位 dsh 安装目录',
+    'Cannot locate the dsh installation directory',
+  ))
+  return resolve(dirname(realpathSync(entry)), '../package.json')
+}
+
+function restartProvider(ctx: Context): AppRestart {
+  return async (request) => {
+    const entry = process.argv[1]
+    if (entry === undefined) throw new Error(ui(
+      '无法定位 dsh 启动文件',
+      'Cannot locate the dsh entry file',
+    ))
+    delete process.env[APP_HANDOFF_ENV]
+    const handoffPath = request.handoff === undefined
+      ? undefined
+      : writeAppHandoff(request.handoff.channel, request.handoff.payload)
+    const child = spawn(process.execPath, [realpathSync(entry), '--profile', request.profile, ...request.args], {
+      stdio: 'inherit',
+      windowsHide: true,
+      env: restartChildEnv(process.env, handoffPath),
+    })
+    try {
+      await new Promise<void>((resolveSpawn, reject) => {
+        child.once('spawn', resolveSpawn)
+        child.once('error', reject)
+      })
+    } catch (error) {
+      if (handoffPath !== undefined) {
+        try { unlinkSync(handoffPath) } catch { /* failed spawn retains no usable handoff owner */ }
+      }
+      throw error
+    }
+    ctx.get('appExit')?.(0)
+  }
+}
+
+function tuiCommand(): Command {
+  return new Command()
+    .name('tad')
+    .description(ui(
+      '启动 TAD Agent Workbench 终端界面。',
+      'Start the TAD Agent Workbench terminal interface.',
+    ))
+    .helpOption('-h, --help', ui('显示帮助', 'Display help'))
+    .option('--cwd <path>', ui(
+      '在指定工作目录开始；默认使用当前目录',
+      'Start in the specified working directory; defaults to the current directory',
+    ))
+    .option('--resume [sessionId]', ui(
+      '恢复指定会话；省略 id 时恢复最近会话',
+      'Resume a session; omit the id to resume the most recent session',
+    ))
+    .argument('[task...]', ui(
+      '进入后立即发送的初始任务',
+      'Initial task to send after entering the interface',
+    ))
+    .addHelpText('after', ui(`
+启动器选项：
+  deepseek --profile <name> ...    覆盖默认 tui Profile；必须写在任务和 TUI 参数之前
+
+示例：
+  deepseek                         在当前目录打开新会话
+  deepseek "检查这个项目"          打开后立即发送任务
+  deepseek --resume               恢复最近会话
+  deepseek --resume <sessionId>   恢复指定会话
+  deepseek --cwd ../project       在指定目录开始
+  deepseek --profile team-tui     使用指定 Harness Profile
+`, `
+Launcher options:
+  deepseek --profile <name> ...    Override the default tui Profile; place it before the task and TUI options
+
+Examples:
+  deepseek                         Open a new session in the current directory
+  deepseek "review this project"   Open the interface and immediately send a task
+  deepseek --resume               Resume the most recent session
+  deepseek --resume <sessionId>   Resume the specified session
+  deepseek --cwd ../project       Start in the specified directory
+  deepseek --profile team-tui     Use the specified Harness Profile
+`))
+}
+
+
+/**
+ * Parse TUI-owned flags and provide immutable launch values.
+ * @param ctx - Host context carrying the launcher argument snapshot.
+ */
+export function apply(ctx: Context): void {
+  // Commander renders help before the Settings service is available. Use the
+  // terminal locale here; the interactive Surface replaces it with an
+  // explicit Harness locale.preference after connecting.
+  setUiLocale(localeFromEnvironment())
+  const profile = activeProfile()
+  ctx.provide('profilePluginManager', new ProfilePluginManager({
+    profile,
+    installAnchor: dshInstallAnchor(),
+    invokingCwd: process.cwd(),
+  }))
+  ctx.provide('appRestart', restartProvider(ctx))
+  const pendingHandoff = readRestartHandoff(consumeAppHandoff('seektty-v1'))
+  const program = tuiCommand()
+  program.action(() => {
+    const options = program.opts<TuiOptions>()
+    const task = program.args.join(' ').trim()
+    const resume = options.resume === true
+      ? true
+      : typeof options.resume === 'string' && options.resume.trim() !== ''
+        ? options.resume
+        : undefined
+    const cwd = resolve(options.cwd ?? process.cwd())
+    const { handoff, startupNotice } = reconcileHandoff(pendingHandoff, {
+      profile,
+      cwd,
+      ...(resume === undefined ? {} : { resume }),
+    })
+    ctx.provide(TUI_STARTUP_SERVICE, {
+      profile,
+      cwd,
+      ...resume !== undefined && { resume },
+      ...task !== '' && { task },
+      ...(handoff?.draft === undefined ? {} : { draft: handoff.draft }),
+      ...(handoff === undefined ? {} : { attachmentPaths: handoff.attachmentPaths }),
+      ...(startupNotice === undefined ? {} : { startupNotice }),
+    } satisfies TuiStartupValues)
+  })
+  parseCmdline(ctx, program)
+}

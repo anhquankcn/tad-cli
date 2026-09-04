@@ -1,0 +1,14 @@
+node_modules/
+coverage/
+*.log
+.DS_Store
+._*
+.env
+.env.*
+!.env.example
+
+# .gitignore goc cua arkan-dsh chan `lib/` vi do la thu muc build cua harness.
+# Goi NAY thi nguoc lai: no CO Y commit lib/ de cai duoc tu git ref, va chinh
+# test cua no (tests/package-contract.test.ts "tracks every packaged path so
+# GitHub ref installs cannot omit files") kiem dieu do. Bo chan tai day.
+!lib/

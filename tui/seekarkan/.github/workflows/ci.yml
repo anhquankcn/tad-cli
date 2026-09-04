@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'codex/**', 'release/**']
+  pull_request:
+
+jobs:
+  check:
+    name: pnpm run check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck, test, build, and pack-check
+        run: pnpm run check
+
+      - name: Keep committed lib/ in sync with source
+        run: |
+          git diff --exit-code lib/
+          test -z "$(git status --porcelain -- lib/)"
+
+      - name: Pack and boot without workspace dev dependencies
+        run: |
+          TARGET=$(node -p "require('./package.json').dsh.compatibility.tested")
+          VERSION=$(node -p "require('./package.json').version")
+          npm install --prefix "$RUNNER_TEMP/dsh-global" "@deepseek-ai/dsh@$TARGET"
+          pnpm pack --pack-destination "$RUNNER_TEMP"
+          DSH_BIN="$RUNNER_TEMP/dsh-global/node_modules/.bin/dsh" \
+          SEEKTTY_SPEC="$RUNNER_TEMP/seektty-$VERSION.tgz" \
+          node scripts/stock-dsh-cycle.mjs
+
+  launcher-windows:
+    name: Windows launcher
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Launcher and package contract tests
+        run: pnpm exec vitest run tests/launcher.test.ts tests/package-contract.test.ts
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Launcher --version smoke
+        run: node ./lib/bin.js --version
