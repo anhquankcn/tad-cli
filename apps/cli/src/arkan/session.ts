@@ -20,9 +20,9 @@
  * @module @deepseek-ai/dsh/arkan/session
  */
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { ArkanCredentials } from './credentials.ts'
 
 /** Studio base URL; `ARKAN_STUDIO_BASE_URL` overrides it. */
@@ -33,6 +33,76 @@ const USER_AGENT = 'arkan-cli/1.0'
 
 /** Where the issued lease is cached for the next `dsh` boot to pick up. */
 const SESSION_PATH = join(homedir(), '.arkan', 'session.json')
+
+/**
+ * Where binding ids are kept, because Studio offers no way to read one back.
+ *
+ * `POST /satellite-links` returns the id exactly once and there is no GET
+ * route. The two indirect read paths both need a permission the engineer who
+ * created the binding does not have — the audit log needs `org:audit:read`,
+ * and `GET /dev-machines` needs `studio:machines:read` — so an operator who
+ * loses the scrollback loses the id permanently. Writing it here makes the id
+ * recoverable with no permission at all.
+ * @returns the path to the binding cache.
+ */
+function linksFile(): string {
+  // Resolved per call, not once at import: a test (and an operator switching
+  // identities) can point HOME elsewhere without reloading the module.
+  return join(homedir(), '.arkan', 'links.json')
+}
+
+/** One remembered binding, as `POST /satellite-links` reported it. */
+interface RememberedLink {
+  id: string
+  satellite_type: string
+  /** Status AT CREATION — never refreshed, so it may be stale. */
+  status_at_create: string
+  created_at: string
+}
+
+/**
+ * Record a binding id locally so a later 409 can name it.
+ * @param link - the binding just created.
+ */
+function rememberLink(link: SatelliteLink): void {
+  const all = readLinks()
+  all[link.satellite_type] = {
+    id: link.id,
+    satellite_type: link.satellite_type,
+    status_at_create: link.status,
+    created_at: new Date().toISOString(),
+  }
+  try {
+    mkdirSync(dirname(linksFile()), { recursive: true })
+    writeFileSync(linksFile(), `${JSON.stringify(all, null, 2)}\n`)
+  } catch {
+    // Best-effort: an unwritable home must not fail a binding that the server
+    // already created. The id is still on stdout.
+  }
+}
+
+/** @returns every remembered binding, keyed by satellite type. */
+function readLinks(): Record<string, RememberedLink> {
+  try {
+    return JSON.parse(readFileSync(linksFile(), 'utf8')) as Record<string, RememberedLink>
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Look up a binding id remembered from an earlier run on this machine.
+ * @param satelliteType - the binding type to recall.
+ * @returns the remembered record, or null.
+ */
+export function recallLink(satelliteType: string): RememberedLink | null {
+  return readLinks()[satelliteType] ?? null
+}
+
+/** @returns the binding cache path, for messages. */
+export function linksPath(): string {
+  return linksFile()
+}
 
 /** Everything `POST /workorders/{id}/lease` needs from the operator. */
 export interface LeaseRequest {
@@ -408,13 +478,44 @@ export interface ApprovedMachine {
  * @param body - response body, verbatim.
  * @returns the message to show.
  */
+/**
+ * Explain a 403, naming the permission and — more usefully — whether the
+ * refusal actually stops the operator getting work done.
+ *
+ * Studio is deny-by-default and answers `Permission required: <name>`. Two of
+ * these are the NORMAL state for an engineer, not a fault: listing machines and
+ * reading the audit log are administrative views, and nothing in the register →
+ * lease → run path needs either. Reporting them as bare "missing permission"
+ * had operators chasing an access request they did not need.
+ * @param body - response body, verbatim.
+ * @returns the message to show.
+ */
+function explainMissingPermission(body: string): string {
+  const needed = /Permission required:\s*([\w:]+)/.exec(body)?.[1] ?? ''
+  if (needed === 'studio:machines:read') {
+    return 'Không xem được danh sách máy — cần quyền `studio:machines:read`.\n'
+      + '  Đây là màn quản trị. Việc của bạn KHÔNG cần nó: đăng ký máy\n'
+      + '  (`dsh session machine`) và xin lease đều không gọi route này.\n'
+      + '  Máy chủ vẫn tự đối chiếu fingerprint khi cấp lease.\n'
+      + `  ${body}`
+  }
+  if (needed === 'studio:machines:approve') {
+    return 'Không duyệt được — cần quyền `studio:machines:approve`.\n'
+      + '  Quyền này thuộc nhóm Studio, tài khoản kỹ sư thường không có.\n'
+      + '  Nhờ người có quyền duyệt bằng id ở trên; đừng chạy lại lệnh tạo.\n'
+      + `  ${body}`
+  }
+  if (needed !== '') return `Thiếu quyền \`${needed}\` cho thao tác này.\n  ${body}`
+  return `Thiếu quyền cho thao tác này.\n  ${body}`
+}
+
 function explainMachine(status: number, body: string): string {
   if (status === 401) return explainUnauthenticated(body)
   if (status === 403 && body.includes('satellite_identity_link')) {
     return 'Chưa có binding danh tính ACTIVE — máy chưa đăng ký được.\n'
       + '  Chạy `dsh session link --approve` trước (FR-TEN-07).\n  ' + body
   }
-  if (status === 403) return `Thiếu quyền cho thao tác này.\n  ${body}`
+  if (status === 403) return explainMissingPermission(body)
   if (status === 404) return 'Máy không tồn tại (hoặc thuộc tenant khác).'
   if (status === 422) {
     return 'Máy không ở trạng thái PENDING_APPROVAL nên không duyệt được.\n'
@@ -575,11 +676,12 @@ function explainLink(status: number, body: string): string {
     // `createSatelliteLink` enriches this case whenever it can.
     return 'Đã có binding loại này chưa thu hồi cho bạn — không tạo thêm được.\n'
       + `  ${body}\n`
-      + '  Nếu nó vẫn PENDING_APPROVAL thì cần id để duyệt. Không tra được qua\n'
-      + '  audit log thì lấy id theo một trong ba cách:\n'
+      + '  Nếu nó vẫn PENDING_APPROVAL thì cần id để duyệt. Studio không có route\n'
+      + '  GET cho satellite-links, nên lấy id theo một trong hai cách:\n'
       + '    · cuộn lên trong terminal — lần tạo thành công đã in "id : <uuid>"\n'
-      + '    · duyệt qua UI ASC (giao diện quản trị ASC, màn Máy tính Dev)\n'
-      + '    · nhờ người có quyền DB tra satellite_identity_link theo employee_id của bạn\n'
+      + '    · nhờ người có quyền `org:audit:read` tra audit log (action\n'
+      + '      satellite_link_create), hoặc người có quyền DB tra bảng\n'
+      + '      satellite_identity_link theo employee_id của bạn\n'
       + '  Có id rồi: dsh session link --approve-id <uuid>'
   }
   if (status === 422) return `Binding không ở trạng thái PENDING_APPROVAL nên không duyệt được.\n  ${body}`
@@ -616,7 +718,81 @@ export async function createSatelliteLink(
     throw new Error(await explainDuplicateLink(baseUrl, credentials, satelliteType, text.slice(0, 400)))
   }
   if (!response.ok) throw new Error(explainLink(response.status, text.slice(0, 400)))
-  return JSON.parse(text) as SatelliteLink
+  const link = JSON.parse(text) as SatelliteLink
+  // The only moment this id is ever readable: no GET route exists for it.
+  rememberLink(link)
+  return link
+}
+
+/** What `GET /api/auth/me` reports about the caller. */
+export interface ArkanProfile {
+  name: string
+  email: string
+  /** Coarse role on the employee row: `admin` or `employee`. */
+  role: string
+  department_name: string
+  is_active: boolean
+  /** Effective permissions — exactly the custom role's list, not a union. */
+  permissions: string[]
+}
+
+/**
+ * The nine permissions of the `Employee` system role, in the server's order.
+ *
+ * Kept here to answer a question `GET /auth/me` cannot: it returns the
+ * permission list but never the role's NAME, so the only way to tell a default
+ * account from one carrying a real custom role is to compare the sets.
+ */
+export const EMPLOYEE_DEFAULT_PERMISSIONS = [
+  'doc:read:own_dept',
+  'doc:create:own_dept',
+  'wiki:read:own_dept',
+  'wiki:write:own_dept',
+  'skill:read:own_dept',
+  'org:departments:read',
+  'kb:read',
+  'kb:upload',
+  'org:meeting:manage',
+] as const
+
+/**
+ * Read the caller's own profile and effective permissions.
+ *
+ * Guarded by authentication alone — no permission gates it — which makes it
+ * the one read an engineer can always perform. Every permission question in
+ * this CLI was previously answered by provoking a 403 and reading the error.
+ * @param baseUrl - Studio base URL.
+ * @param credentials - the caller's session.
+ * @returns the profile.
+ * @throws when Studio refuses the token.
+ */
+export async function fetchProfile(baseUrl: string, credentials: ArkanCredentials): Promise<ArkanProfile> {
+  const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/api/auth/me`, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': USER_AGENT,
+      authorization: `Bearer ${credentials.access_token}`,
+    },
+  })
+  const text = await response.text()
+  if (!response.ok) throw new Error(explainMachine(response.status, text.slice(0, 400)))
+  return JSON.parse(text) as ArkanProfile
+}
+
+/**
+ * Decide whether a permission list is just the untouched `Employee` default.
+ *
+ * A custom role REPLACES the default rather than adding to it, so an operator
+ * being granted one must have their existing permissions carried across. That
+ * makes "is this still the default?" the question an approver needs answered
+ * before writing the new role's list.
+ * @param permissions - effective permissions from the profile.
+ * @returns true when the set is exactly the default nine.
+ */
+export function isDefaultEmployeeRole(permissions: string[]): boolean {
+  const held = new Set(permissions)
+  return held.size === EMPLOYEE_DEFAULT_PERMISSIONS.length
+    && EMPLOYEE_DEFAULT_PERMISSIONS.every(permission => held.has(permission))
 }
 
 /** One audit row, narrowed to the fields this lookup reads. */
@@ -624,6 +800,14 @@ interface AuditEntry {
   resource_id?: string
   reason?: string
   created_at?: string
+}
+
+/** Result of an audit lookup: what it found, and whether it was allowed to look. */
+export interface AuditLookup {
+  /** Matching binding ids, newest first. */
+  ids: string[]
+  /** True when the route answered 403 — an empty `ids` then proves nothing. */
+  denied: boolean
 }
 
 /**
@@ -643,7 +827,7 @@ export async function findLinkIdsInAudit(
   baseUrl: string,
   credentials: ArkanCredentials,
   satelliteType: string,
-): Promise<string[]> {
+): Promise<AuditLookup> {
   const url = new URL('/api/audit/log', baseUrl.replace(/\/+$/, ''))
   url.searchParams.set('action', 'satellite_link_create')
   url.searchParams.set('page_size', '50')
@@ -656,18 +840,23 @@ export async function findLinkIdsInAudit(
         authorization: `Bearer ${credentials.access_token}`,
       },
     })
-    // A missing or forbidden audit route is not an error worth surfacing: the
-    // caller still prints the manual routes, so degrade quietly.
-    if (!response.ok) return []
+    // 403 is the normal answer here, not an edge case: the route needs
+    // `org:audit:read`, which sits in the Organization permission group and is
+    // not held by the engineers who create bindings. Reporting it as "audit has
+    // no record" sent an operator hunting for a binding the log could see
+    // perfectly well — the caller must be able to say "you may not look".
+    if (response.status === 403) return { ids: [], denied: true }
+    if (!response.ok) return { ids: [], denied: false }
     payload = JSON.parse(await response.text()) as typeof payload
   } catch {
-    return []
+    return { ids: [], denied: false }
   }
   const rows = payload.items ?? payload.data ?? []
-  return rows
+  const ids = rows
     .filter(row => typeof row.resource_id === 'string' && (row.reason ?? '').includes(satelliteType))
     .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
     .map(row => row.resource_id as string)
+  return { ids, denied: false }
 }
 
 /**
@@ -684,10 +873,34 @@ async function explainDuplicateLink(
   satelliteType: string,
   body: string,
 ): Promise<string> {
-  const ids = await findLinkIdsInAudit(baseUrl, credentials, satelliteType)
-  if (ids.length === 0) return explainLink(409, body)
   const head = 'Đã có binding loại này chưa thu hồi cho bạn — không tạo thêm được.\n'
     + `  ${body}\n`
+
+  // The local record first: it needs no permission, and the id it holds is the
+  // one this machine created, so it is the answer far more often than audit is.
+  const remembered = recallLink(satelliteType)
+  if (remembered !== null) {
+    return `${head}  Binding đó là cái máy này đã tạo lúc ${remembered.created_at}:\n`
+      + `    ${remembered.id}\n`
+      + `  (ghi trong ${linksFile()}; trạng thái lúc tạo: ${remembered.status_at_create})\n`
+      + '  Nếu còn PENDING_APPROVAL, người có quyền studio:machines:approve chạy:\n'
+      + `    dsh session link --approve-id ${remembered.id}\n`
+      + '  Nếu đã ACTIVE thì dùng thẳng id đó cho `dsh session register --satellite-link`.'
+  }
+
+  const { ids, denied } = await findLinkIdsInAudit(baseUrl, credentials, satelliteType)
+  if (denied) {
+    return `${head}  Binding có thật, nhưng CLI không đọc được id của nó:\n`
+      + '    · audit log trả 403 — cần quyền `org:audit:read`\n'
+      + '    · Studio không có route GET cho satellite-links\n'
+      + '  Lấy id bằng một trong hai cách:\n'
+      + '    · cuộn lên trong terminal — lần tạo thành công đã in "id : <uuid>"\n'
+      + '    · nhờ người có quyền `org:audit:read` tra audit log, action\n'
+      + '      satellite_link_create, hoặc người có quyền DB tra bảng\n'
+      + '      satellite_identity_link theo employee_id của bạn\n'
+      + '  Có id rồi: dsh session link --approve-id <uuid>'
+  }
+  if (ids.length === 0) return explainLink(409, body)
   // The audit log records creations, never the current status, so the binding
   // named here may already be ACTIVE. Say so rather than implying it needs
   // approving: `--approve-id` on an ACTIVE row answers 422, not success.

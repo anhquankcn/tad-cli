@@ -33,7 +33,11 @@ import {
   createSatelliteLink,
   createWorkorder,
   fetchRegistryEntry,
+  fetchProfile,
   findLinkIdsInAudit,
+  isDefaultEmployeeRole,
+  linksPath,
+  recallLink,
   listAvailableWorkorders,
   listMachines,
   readStoredLease,
@@ -266,7 +270,21 @@ export async function runSessionLink(options: ArkanOptions): Promise<number> {
     return 0
   }
 
-  const approved = await approveSatelliteLink(baseUrlOnly, credentials, link.id)
+  // The create above SUCCEEDED. Letting an approve failure propagate as a bare
+  // error made the whole command read as "nothing happened", so the operator
+  // ran it again and met a 409 whose id nothing could look up. Whatever goes
+  // wrong here, the binding exists and its id must survive the message.
+  let approved
+  try {
+    approved = await approveSatelliteLink(baseUrlOnly, credentials, link.id)
+  } catch (error) {
+    process.stderr.write(`\n⚠️  Binding ĐÃ TẠO XONG, chỉ bước duyệt thất bại:\n  ${(error as Error).message}\n`)
+    process.stderr.write('\nĐừng chạy lại lệnh này — nó sẽ tạo lại và bị 409.\n')
+    process.stderr.write(`Đưa id ${link.id} cho người có quyền studio:machines:approve, họ chạy:\n`)
+    process.stderr.write(`  dsh session link --approve-id ${link.id}\n`)
+    process.stderr.write(`\nId cũng đã được ghi lại ở ${linksPath()}.\n`)
+    return 1
+  }
   process.stdout.write(`✅ Đã duyệt: ${approved.status}\n\n`)
   process.stdout.write('Dùng id này cho bước xin lease:\n')
   process.stdout.write(`  dsh session register --workorder <id> --satellite-link ${approved.id}\n`)
@@ -410,7 +428,19 @@ export async function runSessionMachine(options: ArkanOptions): Promise<number> 
     return 0
   }
 
-  reportApproval(await approveMachine(baseUrl, credentials, machine.id))
+  // As with bindings: the register above SUCCEEDED, and an approve failure that
+  // propagates as a bare error makes the whole command read as "nothing
+  // happened". Registration is idempotent, so a rerun is harmless — but it is
+  // also pointless, and saying so beats leaving the operator to guess.
+  try {
+    reportApproval(await approveMachine(baseUrl, credentials, machine.id))
+  } catch (error) {
+    process.stderr.write(`\n⚠️  Máy ĐÃ ĐĂNG KÝ XONG, chỉ bước duyệt thất bại:\n  ${(error as Error).message}\n`)
+    process.stderr.write(`\nĐưa id ${machine.id} cho người có quyền studio:machines:approve, họ chạy:\n`)
+    process.stderr.write(`  dsh session machine --approve-id ${machine.id}\n`)
+    process.stderr.write('\nChạy lại lệnh đăng ký không hỏng gì (idempotent) nhưng cũng không giúp gì.\n')
+    return 1
+  }
   return 0
 }
 
@@ -535,6 +565,20 @@ export async function runSessionRegister(options: ArkanOptions): Promise<number>
 }
 
 /** One line of the status report: a label, a value, and how to read it. */
+/**
+ * The four permissions the DSH chain needs, and what each one unlocks.
+ *
+ * Ordered as the chain uses them. `studio:machines:read` is included even
+ * though it blocks nothing — an operator who sees its 403 needs to be told it
+ * is harmless, and silence would not do that.
+ */
+const CHAIN_PERMISSIONS: readonly (readonly [string, string])[] = [
+  ['studio:read:tenant', 'liệt kê work order (dsh workorders)'],
+  ['studio:write:own', 'tạo work order và xin lease'],
+  ['studio:machines:read', 'xem danh sách máy — thiếu cũng KHÔNG chặn gì'],
+  ['studio:machines:approve', 'duyệt binding và máy dev — thiếu là tắc'],
+]
+
 export interface StatusLine {
   label: string
   value: string
@@ -664,25 +708,65 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
     { label: 'Studio', value: baseUrl },
   ]))
 
-  // Binding: Studio has no GET route, so the audit log is the only read path.
+  // Permissions, read from `GET /auth/me` — the one Studio read that no
+  // permission gates. Without it every question about access had to be answered
+  // by provoking a 403 somewhere and interpreting the error, which is how a
+  // harmless refusal and a blocking one ended up looking identical.
+  const permissionLines: StatusLine[] = []
+  try {
+    const profile = await fetchProfile(baseUrl, credentials)
+    permissionLines.push({ label: 'nhân sự', value: `${profile.name} — ${profile.department_name}` })
+    permissionLines.push({ label: 'role', value: profile.role })
+    if (!profile.is_active) {
+      permissionLines.push({ label: 'trạng thái', value: 'ĐÃ VÔ HIỆU HOÁ', problem: 'nhờ quản trị viên kích hoạt lại' })
+      problems.push('nhân sự bị vô hiệu hoá')
+    }
+    // The role's NAME is not in the response, so say what can be checked: is
+    // this still the untouched default? An approver needs that before writing a
+    // new role's permission list, because a custom role REPLACES the default
+    // rather than adding to it.
+    permissionLines.push(isDefaultEmployeeRole(profile.permissions)
+      ? { label: 'custom role', value: 'chưa có — đang dùng role mặc định Employee (9 quyền)' }
+      : { label: 'custom role', value: `có (${profile.permissions.length} quyền hiệu lực, khác mặc định)` })
+    for (const [permission, what] of CHAIN_PERMISSIONS) {
+      permissionLines.push(profile.permissions.includes(permission)
+        ? { label: permission, value: `có — ${what}` }
+        : { label: permission, value: `THIẾU — ${what}`, problem: 'xem arkan-docs/REQUEST-STUDIO-PERMISSIONS.md' })
+    }
+    if (!profile.permissions.includes('studio:machines:approve')) problems.push('thiếu quyền duyệt')
+  } catch (error) {
+    permissionLines.push({ label: 'tra quyền', value: 'không đọc được', problem: (error as Error).message.split('\n')[0] ?? '' })
+  }
+  process.stdout.write(`\n${section('QUYỀN', permissionLines)}`)
+
+  // Binding: Studio has no GET route, so this is the local record plus audit.
   const linkFromEnv = process.env['ARKAN_SATELLITE_LINK_ID']?.trim() ?? ''
+  const remembered = recallLink('llm_deepseek_harness')
   const audited = await findLinkIdsInAudit(baseUrl, credentials, 'llm_deepseek_harness')
   const bindingLines: StatusLine[] = []
   if (linkFromEnv !== '') bindingLines.push({ label: 'ARKAN_SATELLITE_LINK_ID', value: linkFromEnv })
-  if (audited.length === 0) {
+  if (remembered !== null) {
+    bindingLines.push({ label: 'máy này đã tạo', value: `${remembered.id} (lúc ${remembered.created_at})` })
+  }
+  if (audited.denied) {
+    // Not a problem to fix, and not evidence of a missing binding: the route
+    // needs `org:audit:read`, which the engineer creating bindings does not hold.
+    bindingLines.push({ label: 'tra audit log', value: '403 — thiếu quyền org:audit:read, không kết luận được gì' })
+  } else if (audited.ids.length === 0) {
     bindingLines.push({
       label: 'tra audit log',
       value: 'không thấy binding llm_deepseek_harness',
-      problem: 'chưa khai báo, hoặc audit log không tra được: dsh session link --approve',
+      problem: 'chưa khai báo: dsh session link --approve',
     })
     problems.push('binding')
   } else {
-    const extra = audited.length > 1 ? ` (+${audited.length - 1} bản ghi cũ)` : ''
-    bindingLines.push({ label: 'tra audit log', value: `${String(audited[0])}${extra}` })
+    const extra = audited.ids.length > 1 ? ` (+${audited.ids.length - 1} bản ghi cũ)` : ''
+    bindingLines.push({ label: 'tra audit log', value: `${String(audited.ids[0])}${extra}` })
     // Audit records creations, never current status: say so instead of implying
     // the row is ACTIVE just because an entry exists.
     bindingLines.push({ label: 'lưu ý', value: 'audit chỉ ghi lúc TẠO, không ghi trạng thái hiện tại' })
   }
+  if (remembered === null && audited.denied && linkFromEnv === '') problems.push('binding')
   process.stdout.write(`\n${section('BINDING (satellite link)', bindingLines)}`)
 
   // Dev machine: the fingerprint every lease is checked against.
@@ -727,10 +811,15 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
       if (mine.last_seen_at !== null) machineLines.push({ label: 'lần cuối thấy', value: mine.last_seen_at })
     }
   } catch (error) {
-    // Listing needs an admin permission; not holding it is normal and must not
-    // read as a broken machine.
-    const first = (error as Error).message.split('\n')[0] ?? ''
-    machineLines.push({ label: 'tra Studio', value: 'không tra được', problem: first })
+    // Listing needs `studio:machines:read`, an administrative permission that
+    // engineers do not hold and do not need. Putting that in the `problem` slot
+    // made a normal 403 read as a fault to fix, right next to the real ones.
+    const message = (error as Error).message
+    if (message.includes('studio:machines:read')) {
+      machineLines.push({ label: 'tra Studio', value: 'không xem được danh sách máy (thiếu studio:machines:read — không sao)' })
+    } else {
+      machineLines.push({ label: 'tra Studio', value: 'không tra được', problem: message.split('\n')[0] ?? '' })
+    }
   }
   process.stdout.write(`\n${section('DEV MACHINE', machineLines)}`)
 
