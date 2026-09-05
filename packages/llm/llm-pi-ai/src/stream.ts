@@ -64,7 +64,7 @@ function classifyPiAiError(message: string): string {
   if (/\b413\b|failed to buffer the request body:\s*length limit exceeded|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
   // Bedrock Converse gateways intermittently reject a WELL-FORMED tool turn
   // with this one complaint, delivered as a 400 inside an HTTP 200 stream.
-  // Measured against one such gateway 2026-09-03: the same captured body and
+  // Measured against one such gateway 2026-09-03: the same captured request body and
   // headers failed roughly one turn in three through the harness, yet replayed
   // 23/23 clean. The count it complains about is right in the request we send
   // (assistant toolUse blocks and tool results pair one-to-one, ids matched),

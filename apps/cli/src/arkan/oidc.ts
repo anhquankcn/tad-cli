@@ -306,3 +306,155 @@ export function readClaims(token: string): Record<string, unknown> {
     return {}
   }
 }
+
+/**
+ * Read one field of a parsed JSON body as text.
+ *
+ * The body is `unknown`-valued: an IdP may answer with a nested object where a
+ * string is expected, and `String()` on that renders `[object Object]` — which
+ * is exactly the case where the operator most needs to see what really came
+ * back.
+ * @param body - the parsed body.
+ * @param name - field to read.
+ * @returns the field when it is a string, else an empty string.
+ */
+function field(body: Record<string, unknown>, name: string): string {
+  const value = body[name]
+  return typeof value === 'string' ? value : ''
+}
+
+/** What the device authorization endpoint hands back (RFC 8628 §3.2). */
+interface DeviceAuthorization {
+  device_code: string
+  user_code: string
+  verification_uri: string
+  verification_uri_complete?: string
+  expires_in: number
+  interval?: number
+}
+
+/** One poll of the token endpoint: the parsed body plus whether it succeeded. */
+interface PollResult {
+  ok: boolean
+  body: Record<string, unknown>
+}
+
+/**
+ * POST a form and return the body whether or not the status is 2xx.
+ *
+ * The device grant drives its loop on error bodies — `authorization_pending`
+ * and `slow_down` arrive as HTTP 400 and are the normal case, not faults — so
+ * this cannot use {@link postForm}, which throws on any non-2xx.
+ * @param url - endpoint to post to.
+ * @param form - form fields.
+ * @returns the status flag and parsed body.
+ */
+async function postFormTolerant(url: string, form: Record<string, string>): Promise<PollResult> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      accept: 'application/json',
+      'user-agent': USER_AGENT,
+    },
+    body: new URLSearchParams(form).toString(),
+  })
+  const text = await response.text()
+  let body: Record<string, unknown>
+  try {
+    body = JSON.parse(text) as Record<string, unknown>
+  } catch {
+    // A WAF or proxy can answer HTML; keep it visible rather than reporting a
+    // parse error that hides what actually replied.
+    body = { error: 'non_json_response', error_description: text.slice(0, 300) }
+  }
+  return { ok: response.ok, body }
+}
+
+/**
+ * Sleep between polls. The timer is deliberately NOT unref'd: it is the only
+ * pending work while waiting, so releasing the loop would end the process
+ * mid-login.
+ * @param ms - how long to wait.
+ * @returns a promise that settles after `ms`.
+ */
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => { setTimeout(resolve, ms) })
+}
+
+/**
+ * Sign in without a browser on this machine (RFC 8628 device grant).
+ *
+ * The loopback flow cannot work over SSH: the listener binds the REMOTE host's
+ * `127.0.0.1`, while the browser runs on the operator's own machine, so the
+ * redirect never reaches it. The device grant removes the redirect entirely —
+ * this process only ever talks outbound, and the operator authorises on
+ * whatever device already has a browser and a session.
+ *
+ * Requires the client to have the grant enabled in Keycloak; a client without
+ * it answers `unauthorized_client`, which is reported as the configuration
+ * change it is rather than as a login failure.
+ * @param authority - Keycloak realm URL.
+ * @param clientId - public client id.
+ * @returns the issued session.
+ * @throws when the grant is disabled, the operator declines, or the code expires.
+ */
+export async function deviceLogin(authority: string, clientId: string): Promise<ArkanCredentials> {
+  // PKCE on the device grant is optional in RFC 8628 but REQUIRED by clients
+  // configured with a mandatory challenge method — this realm answers
+  // `invalid_request: Missing parameter: code_challenge_method` without it, so
+  // the pair is always sent rather than only when a flag asks for it.
+  const { verifier, challenge } = createPkce()
+  const started = await postFormTolerant(endpoint(authority, 'auth/device'), {
+    client_id: clientId,
+    scope: 'openid profile email',
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+  })
+  if (!started.ok) {
+    if (started.body.error === 'unauthorized_client') {
+      throw new Error(
+        'Client chưa bật OAuth 2.0 Device Authorization Grant trên Keycloak.\n'
+        + `  Bật tại: Clients → ${clientId} → Settings → OAuth 2.0 Device Authorization Grant\n`
+        + `  ${field(started.body, 'error_description')}`,
+      )
+    }
+    throw new Error(`Không khởi tạo được device flow: ${field(started.body, 'error')} ${field(started.body, 'error_description')}`)
+  }
+  const grant = started.body as unknown as DeviceAuthorization
+
+  process.stdout.write('Mở liên kết này trên máy BẤT KỲ có trình duyệt (điện thoại cũng được):\n\n')
+  process.stdout.write(`  ${grant.verification_uri}\n\n`)
+  process.stdout.write(`Rồi nhập mã:  ${grant.user_code}\n`)
+  if (grant.verification_uri_complete !== undefined) {
+    process.stdout.write(`\nHoặc mở thẳng liên kết đã kèm mã:\n\n  ${grant.verification_uri_complete}\n`)
+  }
+  process.stdout.write(`\nĐang chờ bạn xác thực (mã hết hạn sau ${grant.expires_in}s)...\n`)
+
+  // The server's own pacing, not ours: RFC 8628 lets it raise the interval with
+  // `slow_down`, and polling faster than told is what gets a client throttled.
+  let intervalMs = (grant.interval ?? 5) * 1000
+  const deadline = Date.now() + grant.expires_in * 1000
+
+  while (Date.now() < deadline) {
+    await wait(intervalMs)
+    const poll = await postFormTolerant(endpoint(authority, 'token'), {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      client_id: clientId,
+      device_code: grant.device_code,
+      code_verifier: verifier,
+    })
+    if (poll.ok) return toCredentials(authority, clientId, poll.body)
+
+    const error = field(poll.body, 'error')
+    if (error === 'authorization_pending') continue
+    if (error === 'slow_down') {
+      intervalMs += 5000
+      continue
+    }
+    if (error === 'access_denied') throw new Error('Bạn đã từ chối yêu cầu đăng nhập.')
+    if (error === 'expired_token') break
+    throw new Error(`Device flow lỗi: ${error} ${field(poll.body, 'error_description')}`)
+  }
+  throw new Error(`Mã xác thực đã hết hạn sau ${grant.expires_in}s — chạy lại \`dsh login --device\`.`)
+}

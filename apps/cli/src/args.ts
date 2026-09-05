@@ -58,6 +58,7 @@ interface ArkanInvocation {
   options: {
     authority?: string
     clientId?: string
+    device?: boolean
     studioBaseUrl?: string
     workorder?: string
     satelliteLink?: string
@@ -246,7 +247,8 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
       .helpOption('-h, --help', 'show help for this command')
       .option('--authority <url>', 'Keycloak realm URL (default: env ARKAN_AUTHORITY, then the corporate realm)')
       .option('--client-id <id>', 'public client id registered with the loopback redirect')
-      .action((options: { authority?: string; clientId?: string }) => {
+      .option('--device', 'RFC 8628 device grant: no browser needed on this machine (for SSH sessions)')
+      .action((options: { authority?: string; clientId?: string; device?: boolean }) => {
         rejectParentOptions('login')
         resolved = { mode: 'arkan', action: 'login', options }
       })

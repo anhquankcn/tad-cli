@@ -1,21 +1,12 @@
-> ## TAD — bản fork thêm SSO doanh nghiệp và theo dõi phiên
+> ## TAD — bản fork nội bộ
 >
-> Fork của DeepSeek Harness, thêm ba thứ: đăng nhập SSO qua Keycloak, đăng ký phiên làm việc với một máy chủ quản trị (Arkan Studio), và giao diện terminal tiếng Việt tên TAD.
+> Fork riêng của DeepSeek Harness, thêm đăng nhập SSO doanh nghiệp, đăng ký phiên với Arkan Studio, và giao diện terminal tiếng Việt tên TAD.
 >
-> **Bản phát hành này KHÔNG kèm endpoint mặc định.** Realm SSO và địa chỉ Studio phải do bạn cấu hình — chúng trỏ tới hạ tầng của một tổ chức cụ thể, và một giá trị mặc định sai sẽ hỏng dưới dạng lỗi mạng khó hiểu thay vì báo thiếu cấu hình.
->
-> ```sh
-> export ARKAN_AUTHORITY=https://sso.example.com/realms/<realm>
-> export ARKAN_STUDIO_BASE_URL=https://studio.example.com
-> ```
->
-> Thiếu một trong hai thì lệnh báo đúng biến còn thiếu chứ không thử gọi mạng.
->
-> **Cài.** Cần Node >= 24 — đây là ngưỡng cứng, Node 22 làm build đổ với thông báo lạc hướng.
+> **Cài lên máy mới.** Cần Node >= 24 — đây là ngưỡng cứng, Node 22 làm build đổ với thông báo lạc hướng.
 >
 > ```sh
-> git clone <repo-url> ~/tad-cli
-> ~/tad-cli/install/install.sh --skip-clone --dir ~/tad-cli
+> git clone https://github.com/anhquankcn/arkan-dsh.git ~/arkan-dsh
+> ~/arkan-dsh/install/install.sh --skip-clone --dir ~/arkan-dsh
 > ```
 >
 > Windows dùng `install\install.ps1 -SkipClone -Dir <đường-dẫn>`. Script chạy lại nhiều lần được và không bao giờ ghi credential thật. Chi tiết cùng cách gỡ rối nằm trong `install/README.md`.
@@ -32,7 +23,9 @@
 >
 > Biến ngôn ngữ là `SEEKARKAN_LANG`, không phải `TAD_LANG` dù giao diện mang tên TAD. Không đặt thì giao diện ra tiếng Trung. Biến chỉ có tác dụng với `--profile tui`, và được đọc một lần lúc nạp nên đổi xong phải khởi động lại.
 >
-> **Đăng nhập và nhận việc.** Bốn bước đầu là dựng một lần cho mỗi máy; mỗi bước là điều kiện tiên quyết được máy chủ kiểm lại ở bước sau, nên phải theo thứ tự.
+> ### Quy trình: dựng một lần, rồi xin lease mỗi phiên
+>
+> Bốn bước đầu là **dựng một lần cho mỗi máy**; mỗi bước là điều kiện tiên quyết được máy chủ kiểm lại ở bước sau, nên phải theo thứ tự. Máy đã đăng ký rồi thì bỏ qua `session machine`.
 >
 > ```sh
 > dsh login
@@ -41,18 +34,59 @@
 > dsh session workorder --title T --description D --repo R --checklist ...
 > ```
 >
-> Sau đó mỗi phiên chỉ cần hai lệnh:
+> Đang SSH vào máy chạy lệnh thì `dsh login` không xong được: listener nằm trên `127.0.0.1` của máy remote, còn trình duyệt ở máy bạn. Dùng device flow, không cần trình duyệt trên máy đó:
+>
+> ```sh
+> dsh login --device
+> ```
+>
+> Bước thứ năm là **mỗi phiên**, vì lease chỉ sống 4 giờ (trần 24 giờ):
+>
+> ```sh
+> dsh session register --workorder ID --satellite-link UUID --model-ref REF
+> ```
+>
+> Lease hết hạn thì chạy lại đúng lệnh đó trên **cùng work order cũ** — không cần tạo work order mới, không cần thu hồi gì. Lease quá hạn được đánh dấu hết hiệu lực ngay trong giao dịch cấp lease mới.
+>
+> Có cách gọn hơn, không phải nhớ ba id: `dsh workorders` liệt kê work order chạy được, `dsh session run <id>` nhận lease cho một cái.
 >
 > ```sh
 > dsh workorders
 > dsh session run <workorder_id>
 > ```
 >
-> `dsh status` soi cả sáu mắt của chuỗi trong một lần chạy và gọi tên mắt đang hỏng kèm lệnh sửa — chạy nó trước khi đoán bất cứ điều gì.
+> Và `dsh status` soi cả sáu mắt của chuỗi trong một lần chạy, gọi tên mắt đang hỏng kèm lệnh sửa — nên chạy nó trước khi đoán bất cứ điều gì.
 >
-> **Quan hệ với bản gốc.** Phần lõi là [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) của DeepSeek AI, giấy phép MIT, giữ nguyên. Phần thêm nằm ở `apps/cli/src/arkan/` (SSO + phiên), `tui/seekarkan/` (giao diện) và `install/`. Nếu bạn chỉ cần bản harness gốc thì dùng thẳng upstream: `npx @deepseek-ai/dsh web`.
+> Hướng dẫn từng bước cho máy mới: `arkan-docs/RUNBOOK-DSH-DEV.md`.
 >
-> **Cài bằng npm được không?** Upstream thì được. Fork này thì chưa: `apps/cli/lib` không nằm trong git và không có script `prepare` nên cài từ URL git sẽ không có gì để chạy, và 59 trên 62 dependency của `apps/cli` là `workspace:*` nên npm không dựng lại được từ bản checkout. Dùng `pnpm` theo hướng dẫn cài ở trên.
+> ### Chạy phiên có báo tiến độ
+>
+> Lease id phải nằm trong môi trường **trước khi** gọi launcher:
+>
+> ```powershell
+> $env:ARKAN_LEASE_ID     = '<lease-id>'
+> $env:ARKAN_WORKORDER_ID = '<workorder-id>'
+> & "$env:USERPROFILE\.dsh\arkan-dsh.cmd" --profile headless "cau hoi"
+> ```
+>
+> Đừng đặt biến bằng `cmd /c "set VAR=... && arkan-dsh.cmd"`. Giá trị đó **không tới được tiến trình**, file `~/.dsh/arkan-env.cmd` sẽ thắng, và phiên chạy bằng lease cũ mà không có dấu hiệu gì — triệu chứng giống hệt lease hỏng.
+>
+> ### Kiểm phiên có được theo dõi không
+>
+> Plugin relay tự nói ra tình trạng ở stderr. Đọc dòng tổng kết lúc đóng:
+>
+> ```text
+> [dsh-arkan-relay] §8c OK lần đầu ('session_started') → ...
+> [dsh-arkan-relay] đóng relay — đã gửi 2, lỗi 0, bỏ 0
+> ```
+>
+> `đã gửi N, lỗi 0` là xong. `đã gửi 0, lỗi N` là máy chủ từ chối, và dòng ngay phía trên nói rõ vì sao — lease hết hạn, fingerprint lệch, máy không ACTIVE, binding bị thu hồi, và khoảng chục nguyên nhân khác đều có câu chữ riêng. Không có dòng `dsh-arkan-relay` nào thì plugin chưa được nạp: kiểm mục `arkan-session-relay` trong `~/.dsh/profiles/<profile>/cordis.patch.yml`.
+>
+> Sự kiện lifecycle (`session_started`, `session_ended`) được gửi lại tối đa 3 lần khi lỗi mạng, 5xx hay 429; lỗi 4xx thì bỏ ngay vì gửi lại cũng chỉ nhận đúng câu từ chối đó. Sự kiện tiến độ không gửi lại và vẫn gộp theo nhịp tối thiểu 2 giây.
+>
+> Quy trình đầy đủ, các cổng quản trị và rủi ro đã biết nằm trong `arkan-docs/CR-TAD-001-cli-sop.md`.
+>
+> **Cài bằng npm được không?** Upstream thì được: `npm install -g @deepseek-ai/dsh`. Fork này thì chưa, vì ba lý do có thật: `apps/cli/lib` không nằm trong git và không có script `prepare` nên cài từ URL git sẽ không có gì để chạy; 59 trên 62 dependency của `apps/cli` là `workspace:*` nên npm không dựng lại được từ bản checkout; và publish thì cần registry riêng, vì đẩy lên npm công khai sẽ lộ endpoint SSO và Arkan nội bộ.
 
 ---
 

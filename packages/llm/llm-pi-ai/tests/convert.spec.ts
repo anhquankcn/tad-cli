@@ -825,7 +825,7 @@ describe('mapStopReason / mapUsage', () => {
   })
 
   it('treats the Bedrock tool-pairing 400 as transient, but not the id mismatch', () => {
-    // Observed verbatim from such a gateway: a 400 inside an HTTP 200 stream
+    // Observed verbatim from such a gateway: a 400 carried inside an HTTP 200 stream
     // for a request whose toolUse and toolResult blocks pair one-to-one. The
     // same body replayed clean 23/23, so retrying is what recovers the turn.
     expect(mapStopReason(assistant({

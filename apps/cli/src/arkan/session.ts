@@ -57,6 +57,42 @@ export interface IssuedLease {
 }
 
 /**
+ * Explain a 401 from Studio, which covers two quite different situations.
+ *
+ * Studio maps a Keycloak token to an `Employee` row **by email**, and answers
+ * 401 `Not authenticated` when no row matches — the token is perfectly valid,
+ * the organisation simply has no record of that person. Reporting that as
+ * "token expired" sends the operator to `dsh login`, which cannot help: signing
+ * in again as the same account produces the same 401.
+ *
+ * The server's own `detail` separates the cases, so read it rather than listing
+ * possibilities and leaving the operator to guess.
+ * @param body - response body, verbatim.
+ * @returns the message to show.
+ */
+function explainUnauthenticated(body: string): string {
+  if (body.includes('Account not found or deactivated')) {
+    return 'Tài khoản đã bị vô hiệu hoá trong Arkan.\n'
+      + '  Đăng nhập lại không giúp được — cần quản trị viên kích hoạt lại nhân sự.\n'
+      + `  ${body}`
+  }
+  if (body.includes('Not authenticated')) {
+    return 'Token hợp lệ, nhưng Arkan không có nhân sự nào khớp email của tài khoản này.\n'
+      + '  Xem đang đăng nhập bằng tài khoản nào: dsh whoami\n'
+      + '  Nếu sai tài khoản: dsh logout rồi đăng nhập lại bằng tài khoản đã được cấp.\n'
+      + '  Nếu đúng tài khoản: nhờ quản trị viên tạo Employee với ĐÚNG email đó (so khớp không phân biệt hoa thường).\n'
+      + `  ${body}`
+  }
+  if (body.includes('Invalid or expired token')) {
+    return 'Token hết hạn hoặc không hợp lệ — chạy `dsh login` lại.'
+  }
+  return 'Không xác thực được (401). Hai nguyên nhân thường gặp:\n'
+    + '  · token hết hạn hoặc không hợp lệ — chạy `dsh login` lại;\n'
+    + '  · Arkan chưa có nhân sự khớp email của tài khoản — kiểm bằng `dsh whoami`.\n'
+    + `  ${body}`
+}
+
+/**
  * Turn a Studio rejection into a message that names the actual gate, because
  * the raw text alone rarely tells an engineer which of several preconditions
  * they tripped.
@@ -65,7 +101,7 @@ export interface IssuedLease {
  * @returns the message to show.
  */
 function explain(status: number, body: string): string {
-  if (status === 401) return 'Token hết hạn hoặc không hợp lệ — chạy `dsh login` lại.'
+  if (status === 401) return explainUnauthenticated(body)
   if (status === 403 && body.includes('satellite_link')) {
     return 'Binding không thuộc bạn — chỉ cấp lease bằng identity/máy của chính mình.'
   }
@@ -205,7 +241,7 @@ function explainAvailable(status: number, body: string): string {
       + '  Đăng ký và duyệt máy: dsh session machine --generate-fingerprint --approve\n'
       + `  ${body}`
   }
-  if (status === 401) return 'Token hết hạn hoặc không hợp lệ — chạy `dsh login` lại.'
+  if (status === 401) return explainUnauthenticated(body)
   if (status === 403 && body.includes('ADR-DEV-02')) {
     return 'Machine token thuộc máy của kỹ sư khác — mỗi máy gắn với một kỹ sư.\n'
       + `  Đăng ký máy này cho chính bạn: dsh session machine --generate-fingerprint --approve\n  ${body}`
@@ -308,7 +344,7 @@ function readGateRejection(body: string): GateRejection {
  * @returns the message to show.
  */
 function explainWorkorder(status: number, body: string, checklist: string[] = []): string {
-  if (status === 401) return 'Token hết hạn hoặc không hợp lệ — chạy `dsh login` lại.'
+  if (status === 401) return explainUnauthenticated(body)
   if (status === 403) return `Thiếu quyền studio:write:own.\n  ${body}`
   if (status === 409) return `Engine plan chưa cấu hình cho tenant này.\n  ${body}`
   if (status !== 422) return `HTTP ${status}: ${body}`
@@ -373,7 +409,7 @@ export interface ApprovedMachine {
  * @returns the message to show.
  */
 function explainMachine(status: number, body: string): string {
-  if (status === 401) return 'Token hết hạn hoặc không hợp lệ — chạy `dsh login` lại.'
+  if (status === 401) return explainUnauthenticated(body)
   if (status === 403 && body.includes('satellite_identity_link')) {
     return 'Chưa có binding danh tính ACTIVE — máy chưa đăng ký được.\n'
       + '  Chạy `dsh session link --approve` trước (FR-TEN-07).\n  ' + body
@@ -531,7 +567,7 @@ export interface SatelliteLink {
  * @returns the message to show.
  */
 function explainLink(status: number, body: string): string {
-  if (status === 401) return 'Token hết hạn hoặc không hợp lệ — chạy `dsh login` lại.'
+  if (status === 401) return explainUnauthenticated(body)
   if (status === 403) return `Thiếu quyền. Duyệt binding cần \`studio:machines:approve\`.\n  ${body}`
   if (status === 404) return 'Binding không tồn tại (hoặc thuộc tenant khác).'
   if (status === 409) {
@@ -542,7 +578,7 @@ function explainLink(status: number, body: string): string {
       + '  Nếu nó vẫn PENDING_APPROVAL thì cần id để duyệt. Không tra được qua\n'
       + '  audit log thì lấy id theo một trong ba cách:\n'
       + '    · cuộn lên trong terminal — lần tạo thành công đã in "id : <uuid>"\n'
-      + '    · duyệt qua giao diện quản trị ASC, màn Máy tính Dev\n'
+      + '    · duyệt qua UI ASC (giao diện quản trị ASC, màn Máy tính Dev)\n'
       + '    · nhờ người có quyền DB tra satellite_identity_link theo employee_id của bạn\n'
       + '  Có id rồi: dsh session link --approve-id <uuid>'
   }

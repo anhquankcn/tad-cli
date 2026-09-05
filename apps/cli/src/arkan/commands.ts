@@ -20,6 +20,7 @@ import {
 import {
   DEFAULT_AUTHORITY,
   DEFAULT_CLIENT_ID,
+  deviceLogin,
   login,
   readClaims,
   refresh,
@@ -52,6 +53,8 @@ import {
 export interface ArkanOptions {
   authority?: string
   clientId?: string
+  /** `dsh login --device`: RFC 8628 instead of the loopback redirect. */
+  device?: boolean
   studioBaseUrl?: string
   workorder?: string
   satelliteLink?: string
@@ -88,14 +91,16 @@ function setting(flag: string | undefined, variable: string, fallback: string): 
 }
 
 /**
- * Resolve an endpoint that this build ships no default for.
+ * Resolve an endpoint that a build may ship no default for.
  *
- * The upstream distribution deliberately carries no SSO realm or Studio URL:
- * those name one organisation's infrastructure, and a wrong-but-present
- * default fails as a confusing network error instead of as a missing setting.
+ * The public distribution deliberately carries no SSO realm and no Studio URL:
+ * those name one organisation's infrastructure. Without this guard an unset
+ * endpoint reaches `fetch` as an empty string and surfaces as a confusing
+ * network error, when the real problem is a missing setting the operator can
+ * fix in one line.
  * @param flag - value passed on the command line, if any.
  * @param variable - environment variable consulted next.
- * @param fallback - build-time default, empty in this distribution.
+ * @param fallback - build-time default, empty in the public distribution.
  * @param what - what the endpoint is, for the error message.
  * @returns the resolved endpoint.
  * @throws when nothing supplies it.
@@ -104,8 +109,7 @@ function requireEndpoint(flag: string | undefined, variable: string, fallback: s
   const value = setting(flag, variable, fallback)
   if (value.trim() !== '') return value
   throw new Error(
-    `Chưa cấu hình ${what}. Bản phát hành này không kèm endpoint mặc định.
-`
+    `Chưa cấu hình ${what}. Bản phát hành này không kèm endpoint mặc định.\n`
     + `  Đặt biến môi trường ${variable}=<url>, hoặc truyền cờ tương ứng.`,
   )
 }
@@ -151,7 +155,12 @@ async function requireFreshCredentials(): Promise<ArkanCredentials> {
 export async function runLogin(options: ArkanOptions): Promise<number> {
   const authority = requireEndpoint(options.authority, 'ARKAN_AUTHORITY', DEFAULT_AUTHORITY, 'realm SSO')
   const clientId = setting(options.clientId, 'ARKAN_CLIENT_ID', DEFAULT_CLIENT_ID)
-  const credentials = await login(authority, clientId)
+  // The loopback flow needs a browser on THIS machine: it binds this host's
+  // 127.0.0.1, so over SSH the redirect lands on the operator's own laptop
+  // where nothing is listening. The device grant has no redirect at all.
+  const credentials = options.device === true
+    ? await deviceLogin(authority, clientId)
+    : await login(authority, clientId)
   writeCredentials(credentials)
   process.stdout.write(`✅ Đã đăng nhập: ${identity(credentials)}\n`)
   process.stdout.write(`   Lưu tại ${credentialPath()} (dùng chung với arkan CLI)\n`)
