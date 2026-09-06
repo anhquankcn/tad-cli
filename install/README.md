@@ -131,6 +131,12 @@ bash install/install.sh --skip-clone --dir ~/arkan-dsh
 Chạy qua `bash` cho chắc: bản clone trước 2026-09-06 nhận `install.sh` với mode
 `100644` và gọi trực tiếp sẽ ra `Permission denied`.
 
+## Xin lease để chạy có báo tiến độ
+
+Phiên báo tiến độ lên Console cần một lease, và lease treo trên một work order
+đã qua Value & Risk Gate. Cách viết work order qua được cổng — và ba bậc rủi ro,
+trong đó hai bậc không chạy được — nằm trong `install/WORKORDER.md`.
+
 ## Log của harness
 
 Plugin ghi chẩn đoán vào `~/.dsh/logs/dsh.log`, không ghi ra màn hình — một dòng
