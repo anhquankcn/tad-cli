@@ -121,9 +121,29 @@ Biến ngôn ngữ là `SEEKARKAN_LANG` (hoặc `SEEKTTY_LANG` cho tương thíc
 **không phải** `TAD_LANG`, dù giao diện mang tên TAD. Không đặt thì giao diện ra
 **tiếng Trung**, không phải tiếng Anh.
 
+## Cập nhật về sau
+
+```sh
+cd ~/arkan-dsh && git pull
+bash install/install.sh --skip-clone --dir ~/arkan-dsh
+```
+
+Chạy qua `bash` cho chắc: bản clone trước 2026-09-06 nhận `install.sh` với mode
+`100644` và gọi trực tiếp sẽ ra `Permission denied`.
+
+## Log của harness
+
+Plugin ghi chẩn đoán vào `~/.dsh/logs/dsh.log`, không ghi ra màn hình — một dòng
+ghi thô sẽ đè lên khung TUI đang vẽ. File tự xoay vòng một thế hệ khi quá 4MB.
+
+`dsh status` in đường dẫn đó ở mục **CHẨN ĐOÁN**, ngay đầu báo cáo. Nếu mục đó
+báo file "chưa có" thì bản dsh của bạn cũ hơn 2026-09-06: khi ấy harness chưa
+đăng ký sink nào, nên mọi thứ plugin ghi qua `ctx.logger` đều bị vứt.
+
 ## Kiểm tra khi có trục trặc
 
 ```sh
+dsh status                           # chuỗi quản trị + đường dẫn log
 dsh --profile tui --dump-config      # xem cây plugin đã compose
 ls node_modules/.pnpm | grep pi-tui  # phải thấy bản có hậu tố hash
 ```

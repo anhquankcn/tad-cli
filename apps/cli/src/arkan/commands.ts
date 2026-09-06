@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto'
 import { statSync } from 'node:fs'
 import { hostname, networkInterfaces, type NetworkInterfaceInfo } from 'node:os'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
+import { pluginsDiffer, readInstalledPlugins } from './plugin-state.ts'
 import {
   clearCredentials,
   credentialPath,
@@ -700,13 +701,37 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
   } catch {
     // Absent is a real state worth reporting, not a failure to handle.
   }
-  process.stdout.write(section('CHẨN ĐOÁN', [logSize >= 0
+  const diagnosticLines: StatusLine[] = [logSize >= 0
     ? { label: 'log harness', value: `${logPath} (${Math.round(logSize / 1024)} KB)` }
     : {
       label: 'log harness',
       value: `${logPath} — chưa có`,
       problem: 'bản dsh trước 2026-09-06 không ghi file này; cập nhật rồi chạy lại',
-    }]))
+    }]
+
+  // The relay plugin is copied into each profile by hand, so profiles drift.
+  // Its `version` does not move between patches; the built entry's size does,
+  // which makes it the only field that answers "is this the build I just made".
+  const installed = readInstalledPlugins(dshHomePath('profiles'))
+  if (installed.length === 0) {
+    diagnosticLines.push({ label: 'plugin relay', value: 'chưa cài ở profile nào' })
+  } else {
+    for (const one of installed) {
+      diagnosticLines.push({
+        label: `plugin @ ${one.profile}`,
+        value: `v${one.version} · ${one.bytes} B · build ${one.builtAt}`,
+      })
+    }
+    if (pluginsDiffer(installed)) {
+      diagnosticLines.push({
+        label: 'lệch bản',
+        value: 'các profile đang chạy build KHÁC nhau',
+        problem: 'cài lại vào MỌI profile bạn dùng, không riêng một cái',
+      })
+      problems.push('plugin relay lệch bản giữa các profile')
+    }
+  }
+  process.stdout.write(section('CHẨN ĐOÁN', diagnosticLines))
   process.stdout.write('\n')
 
   let credentials: ArkanCredentials
