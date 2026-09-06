@@ -127,6 +127,27 @@ export interface IssuedLease {
 }
 
 /**
+ * Describe a 5xx, which says nothing about what the operator did.
+ *
+ * FastAPI answers an unhandled exception with a bare `Internal Server Error`
+ * and keeps the traceback in the server log, by design. Printing that body
+ * alone reads as a command that failed for the operator's reasons, so they
+ * retry, change flags, and re-check their own setup — none of which can help.
+ * Naming it as a server fault, and naming the one artefact that identifies it,
+ * is the whole of what a client can honestly offer here.
+ * @param status - HTTP status returned by Studio.
+ * @param body - response body, verbatim.
+ * @returns the message to show.
+ */
+function explainServerFault(status: number, body: string): string {
+  return `Máy chủ Arkan lỗi (HTTP ${status}) — không phải do lệnh hay cấu hình của bạn.\n`
+    + `  ${body}\n`
+    + '  Thân phản hồi cố ý không kèm chi tiết; traceback nằm trong log máy chủ.\n'
+    + '  Báo cho người vận hành Arkan kèm: thời điểm chạy, lệnh đã chạy, và email tài khoản.\n'
+    + '  Chạy lại vẫn có thể thành công nếu là lỗi thoáng qua.'
+}
+
+/**
  * Explain a 401 from Studio, which covers two quite different situations.
  *
  * Studio maps a Keycloak token to an `Employee` row **by email**, and answers
@@ -184,6 +205,7 @@ function explain(status: number, body: string): string {
   }
   if (status === 422) return `Studio từ chối (tier / máy / đã có lease ACTIVE): ${body}`
   if (status === 404) return `Không tìm thấy: ${body}`
+  if (status >= 500) return explainServerFault(status, body)
   return `HTTP ${status}: ${body}`
 }
 
@@ -318,6 +340,7 @@ function explainAvailable(status: number, body: string): string {
   }
   if (status === 403) return `Thiếu quyền studio:read:tenant.\n  ${body}`
   if (status === 422) return `Studio từ chối tham số: ${body}`
+  if (status >= 500) return explainServerFault(status, body)
   return `HTTP ${status}: ${body}`
 }
 
@@ -417,6 +440,7 @@ function explainWorkorder(status: number, body: string, checklist: string[] = []
   if (status === 401) return explainUnauthenticated(body)
   if (status === 403) return `Thiếu quyền studio:write:own.\n  ${body}`
   if (status === 409) return `Engine plan chưa cấu hình cho tenant này.\n  ${body}`
+  if (status >= 500) return explainServerFault(status, body)
   if (status !== 422) return `HTTP ${status}: ${body}`
 
   const verdict = readGateRejection(body)
@@ -521,6 +545,7 @@ function explainMachine(status: number, body: string): string {
     return 'Máy không ở trạng thái PENDING_APPROVAL nên không duyệt được.\n'
       + '  Máy đã REVOKED thì KHÔNG hồi sinh được — phải đăng ký fingerprint mới.\n  ' + body
   }
+  if (status >= 500) return explainServerFault(status, body)
   return `HTTP ${status}: ${body}`
 }
 
@@ -686,6 +711,7 @@ function explainLink(status: number, body: string): string {
   }
   if (status === 422) return `Binding không ở trạng thái PENDING_APPROVAL nên không duyệt được.\n  ${body}`
   if (status === 503) return `Máy chủ chưa cấu hình khoá mã hoá vệ tinh (fail-closed).\n  ${body}`
+  if (status >= 500) return explainServerFault(status, body)
   return `HTTP ${status}: ${body}`
 }
 
@@ -715,7 +741,10 @@ export async function createSatelliteLink(
   })
   const text = await response.text()
   if (response.status === 409) {
-    throw new Error(await explainDuplicateLink(baseUrl, credentials, satelliteType, text.slice(0, 400)))
+    // Full body, not the 400-char excerpt the other branches take: the server
+    // now names the existing binding inside it, and truncating the one
+    // authoritative answer to keep a message short would be absurd.
+    throw new Error(await explainDuplicateLink(baseUrl, credentials, satelliteType, text))
   }
   if (!response.ok) throw new Error(explainLink(response.status, text.slice(0, 400)))
   const link = JSON.parse(text) as SatelliteLink
@@ -726,6 +755,8 @@ export async function createSatelliteLink(
 
 /** What `GET /api/auth/me` reports about the caller. */
 export interface ArkanProfile {
+  /** Employee row id — the `principal_id` that scopes an audit query. */
+  id: string
   name: string
   email: string
   /** Coarse role on the employee row: `admin` or `employee`. */
@@ -802,6 +833,34 @@ interface AuditEntry {
   created_at?: string
 }
 
+/**
+ * Read the binding a 409 is complaining about, when the server names it.
+ *
+ * Studio grew this in ARKAN-CR-DEV-022, after an engineer spent two days
+ * unable to learn the id of his own binding: the row is the caller's, so
+ * returning its id discloses nothing, and it removes the whole class of
+ * dead end that the audit log and the local cache only work around.
+ *
+ * Deliberately strict about `code`. A future 409 on the OTHER unique index
+ * (`satellite_type`, `external_user_id`) may name a row belonging to someone
+ * else, so an id is trusted only under the code that means "yours".
+ * @param body - the 409 response body, verbatim.
+ * @returns the named binding, or null when the server did not name one.
+ */
+function readConflictingLink(body: string): { id: string; status: string } | null {
+  let detail: unknown
+  try {
+    detail = (JSON.parse(body) as { detail?: unknown }).detail
+  } catch {
+    return null
+  }
+  if (typeof detail !== 'object' || detail === null) return null
+  const row = detail as { code?: unknown; id?: unknown; status?: unknown }
+  if (row.code !== 'satellite_link_exists') return null
+  if (typeof row.id !== 'string' || row.id === '') return null
+  return { id: row.id, status: typeof row.status === 'string' ? row.status : '(không rõ)' }
+}
+
 /** Result of an audit lookup: what it found, and whether it was allowed to look. */
 export interface AuditLookup {
   /** Matching binding ids, newest first. */
@@ -827,9 +886,28 @@ export async function findLinkIdsInAudit(
   baseUrl: string,
   credentials: ArkanCredentials,
   satelliteType: string,
+  principalId?: string,
 ): Promise<AuditLookup> {
+  // The audit log is TENANT-WIDE. Without `principal_id` the newest
+  // `satellite_link_create` in the whole tenant comes back, and this function
+  // then offers a colleague's binding id as the caller's own. That happened:
+  // an operator's `dsh status` named a row belonging to a different employee,
+  // beside the correct one from the local cache. Scoping is not optional, so a
+  // principal that cannot be established means reporting nothing at all rather
+  // than reporting something that may not be theirs.
+  let principal = principalId ?? ''
+  if (principal === '') {
+    try {
+      principal = (await fetchProfile(baseUrl, credentials)).id
+    } catch {
+      return { ids: [], denied: false }
+    }
+  }
+  if (principal === '') return { ids: [], denied: false }
+
   const url = new URL('/api/audit/log', baseUrl.replace(/\/+$/, ''))
   url.searchParams.set('action', 'satellite_link_create')
+  url.searchParams.set('principal_id', principal)
   url.searchParams.set('page_size', '50')
   let payload: { items?: AuditEntry[]; data?: AuditEntry[] }
   try {
@@ -873,14 +951,35 @@ async function explainDuplicateLink(
   satelliteType: string,
   body: string,
 ): Promise<string> {
+  // The raw body is worth showing only while nothing better is available: once
+  // the server names the binding, repeating its JSON underneath adds noise to
+  // the one line the operator needs to copy.
   const head = 'Đã có binding loại này chưa thu hồi cho bạn — không tạo thêm được.\n'
-    + `  ${body}\n`
+  const headWithBody = `${head}  ${body.slice(0, 400)}\n`
 
-  // The local record first: it needs no permission, and the id it holds is the
-  // one this machine created, so it is the answer far more often than audit is.
+  // The server's own answer wins over everything below it. Studio names the
+  // conflicting binding in the 409 body (ARKAN-CR-DEV-022): that id is
+  // current, authoritative, and costs no permission — unlike the audit log,
+  // and unlike the local cache, which only knows what THIS machine created.
+  const named = readConflictingLink(body)
+  if (named !== null) {
+    // Remember it too: the next 409 on a machine that never created this
+    // binding then answers without a round trip.
+    rememberLink({ id: named.id, satellite_type: satelliteType, status: named.status })
+    return `${head}  Máy chủ chỉ đích danh binding đang chặn:\n`
+      + `    id         : ${named.id}\n`
+      + `    trạng thái : ${named.status}\n`
+      + (named.status === 'PENDING_APPROVAL'
+        ? '  Nó chờ người khác duyệt (FR-TEN-07) — đưa id trên cho người có\n'
+          + `  quyền studio:machines:approve, họ chạy:\n    dsh session link --approve-id ${named.id}\n`
+        : '  Nó đã dùng được — truyền thẳng id đó cho `dsh session register --satellite-link`.\n')
+  }
+
+  // The local record next: it needs no permission either, but it only knows
+  // bindings created from this machine.
   const remembered = recallLink(satelliteType)
   if (remembered !== null) {
-    return `${head}  Binding đó là cái máy này đã tạo lúc ${remembered.created_at}:\n`
+    return `${headWithBody}  Binding đó là cái máy này đã tạo lúc ${remembered.created_at}:\n`
       + `    ${remembered.id}\n`
       + `  (ghi trong ${linksFile()}; trạng thái lúc tạo: ${remembered.status_at_create})\n`
       + '  Nếu còn PENDING_APPROVAL, người có quyền studio:machines:approve chạy:\n'
@@ -890,7 +989,7 @@ async function explainDuplicateLink(
 
   const { ids, denied } = await findLinkIdsInAudit(baseUrl, credentials, satelliteType)
   if (denied) {
-    return `${head}  Binding có thật, nhưng CLI không đọc được id của nó:\n`
+    return `${headWithBody}  Binding có thật, nhưng CLI không đọc được id của nó:\n`
       + '    · audit log trả 403 — cần quyền `org:audit:read`\n'
       + '    · Studio không có route GET cho satellite-links\n'
       + '  Lấy id bằng một trong hai cách:\n'
@@ -905,13 +1004,13 @@ async function explainDuplicateLink(
   // named here may already be ACTIVE. Say so rather than implying it needs
   // approving: `--approve-id` on an ACTIVE row answers 422, not success.
   if (ids.length === 1) {
-    return `${head}  Tra audit log ra binding: ${ids[0]}\n`
+    return `${headWithBody}  Tra audit log ra binding: ${ids[0]}\n`
       + '  Nếu nó còn PENDING_APPROVAL thì duyệt bằng:\n'
       + `    dsh session link --approve-id ${ids[0]}\n`
       + '  Nếu đã ACTIVE thì dùng thẳng id đó cho `dsh session register --satellite-link`.'
   }
   const list = ids.slice(0, 5).map(id => `    · ${id}`).join('\n')
-  return `${head}  Tra audit log ra ${ids.length} binding cùng loại, mới nhất trước:\n${list}\n`
+  return `${headWithBody}  Tra audit log ra ${ids.length} binding cùng loại, mới nhất trước:\n${list}\n`
     + '  Audit chỉ ghi lúc tạo, không ghi trạng thái hiện tại — cái chưa thu hồi\n'
     + '  thường là cái mới nhất. Duyệt: dsh session link --approve-id <uuid>'
 }

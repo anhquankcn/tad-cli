@@ -76,3 +76,27 @@ describe('403 from Studio', () => {
     expect(message).toContain('Forbidden')
   })
 })
+
+describe('5xx from Studio', () => {
+  it('names it a server fault and does not send the operator debugging themselves', async () => {
+    // FastAPI's body for an unhandled exception carries nothing actionable, so
+    // printing it alone had an operator re-checking flags and configuration
+    // that could not have caused it.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('Internal Server Error', { status: 500 })))
+
+    const message = await messageFor()
+
+    expect(message).toContain('Máy chủ Arkan lỗi')
+    expect(message).toContain('không phải do lệnh hay cấu hình của bạn')
+    expect(message).toContain('log máy chủ')
+  })
+
+  it('still shows a 502 from a gateway the same way', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('Bad Gateway', { status: 502 })))
+
+    const message = await messageFor()
+
+    expect(message).toContain('HTTP 502')
+    expect(message).toContain('Bad Gateway')
+  })
+})

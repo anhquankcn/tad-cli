@@ -29,7 +29,8 @@ import {
   watchUserPatches,
   type Profile,
 } from '@deepseek-ai/dsh-app-boot'
-import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { dshHomePath, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { exportLogsToFile } from './log-file.ts'
 
 /** Shipped agent-preset root: beside this app's own config, in both source and built layouts. */
 const SHIPPED_PRESET_ROOT = fileURLToPath(new URL('../config/agent-presets/', import.meta.url))
@@ -247,6 +248,11 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // application must not mutate the objects later reloads recompose from.
   const ctx = await boot(NAME, rootConfig, structuredClone(allPatches(composed)), (hostCtx) => {
     app.current = hostCtx
+    // First, so a plugin that logs while activating is already covered. The
+    // logger service has no sink of its own: without this, `ctx.logger.warn`
+    // discards the message, and a plugin author who notices reaches for
+    // `console.warn` instead — which writes over whatever the TUI is drawing.
+    exportLogsToFile(hostCtx, dshHomePath('logs', 'dsh.log'))
     // Before any config-tree entry mounts, so plugins resolve all launch-time
     // environment values from the same immutable provenance snapshot.
     hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment)

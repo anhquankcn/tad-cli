@@ -8,7 +8,9 @@
  */
 
 import { createHash } from 'node:crypto'
+import { statSync } from 'node:fs'
 import { hostname, networkInterfaces, type NetworkInterfaceInfo } from 'node:os'
+import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import {
   clearCredentials,
   credentialPath,
@@ -686,6 +688,27 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
   const baseUrl = requireEndpoint(options.studioBaseUrl, 'ARKAN_STUDIO_BASE_URL', DEFAULT_STUDIO_BASE_URL, 'Arkan Studio')
   const problems: string[] = []
 
+  // First, and above the not-logged-in short circuit: plugins log to a file
+  // now rather than to the terminal, which keeps the TUI intact but hides the
+  // diagnostics unless something says where they went. That pointer matters
+  // most when the chain is broken — including when the operator cannot log in,
+  // which is exactly where the report used to stop.
+  const logPath = dshHomePath('logs', 'dsh.log')
+  let logSize = -1
+  try {
+    logSize = statSync(logPath).size
+  } catch {
+    // Absent is a real state worth reporting, not a failure to handle.
+  }
+  process.stdout.write(section('CHẨN ĐOÁN', [logSize >= 0
+    ? { label: 'log harness', value: `${logPath} (${Math.round(logSize / 1024)} KB)` }
+    : {
+      label: 'log harness',
+      value: `${logPath} — chưa có`,
+      problem: 'bản dsh trước 2026-09-06 không ghi file này; cập nhật rồi chạy lại',
+    }]))
+  process.stdout.write('\n')
+
   let credentials: ArkanCredentials
   try {
     credentials = await requireFreshCredentials()
@@ -713,8 +736,10 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
   // by provoking a 403 somewhere and interpreting the error, which is how a
   // harmless refusal and a blocking one ended up looking identical.
   const permissionLines: StatusLine[] = []
+  let principalId = ''
   try {
     const profile = await fetchProfile(baseUrl, credentials)
+    principalId = profile.id
     permissionLines.push({ label: 'nhân sự', value: `${profile.name} — ${profile.department_name}` })
     permissionLines.push({ label: 'role', value: profile.role })
     if (!profile.is_active) {
@@ -742,7 +767,10 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
   // Binding: Studio has no GET route, so this is the local record plus audit.
   const linkFromEnv = process.env['ARKAN_SATELLITE_LINK_ID']?.trim() ?? ''
   const remembered = recallLink('llm_deepseek_harness')
-  const audited = await findLinkIdsInAudit(baseUrl, credentials, 'llm_deepseek_harness')
+  // Reuse the profile read above rather than fetching it again just to scope
+  // the audit query; `principalId` empty means the section below reports
+  // nothing instead of reporting the tenant's newest binding as yours.
+  const audited = await findLinkIdsInAudit(baseUrl, credentials, 'llm_deepseek_harness', principalId)
   const bindingLines: StatusLine[] = []
   if (linkFromEnv !== '') bindingLines.push({ label: 'ARKAN_SATELLITE_LINK_ID', value: linkFromEnv })
   if (remembered !== null) {

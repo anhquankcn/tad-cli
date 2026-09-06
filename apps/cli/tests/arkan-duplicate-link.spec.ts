@@ -62,6 +62,12 @@ function stubFetch(audit: { status: number; body: unknown }) {
     if (url.includes('/api/studio/v1/satellite-links')) {
       return new Response(CONFLICT, { status: 409 })
     }
+    if (url.includes('/api/auth/me')) {
+      // The audit lookup scopes itself to the caller, so it resolves the
+      // employee id first — without it the query would return the tenant's
+      // newest binding rather than this operator's.
+      return new Response(JSON.stringify({ id: 'eeee5555-0000-4000-8000-000000000005', permissions: [] }), { status: 200 })
+    }
     if (url.includes('/api/audit/log')) {
       return new Response(JSON.stringify(audit.body), { status: audit.status })
     }
@@ -205,5 +211,97 @@ describe('duplicate satellite link', () => {
     // must not replace the 409 explanation with a connection error.
     expect((error as Error).message).toContain('Đã có binding loại này chưa thu hồi')
     expect((error as Error).message).not.toContain('network down')
+  })
+})
+
+/**
+ * ARKAN-CR-DEV-022 made the server name the conflicting binding inside the 409
+ * body. That is the authoritative answer and it costs no permission, so it has
+ * to win over both fallbacks — otherwise the round trip the server now makes
+ * possible is wasted on a message the operator still cannot act on.
+ */
+describe('409 that names the binding', () => {
+  /** The body Studio returns after CR-DEV-022. */
+  const NAMED = (status: string) => JSON.stringify({
+    detail: {
+      code: 'satellite_link_exists',
+      message: `Đã có liên kết '${TYPE}' chưa thu hồi cho kỹ sư này.`,
+      id: 'ffff6666-0000-4000-8000-000000000006',
+      status,
+    },
+  })
+
+  /**
+   * Answer the create with a named 409; fail loudly on any other call.
+   * @param body - the 409 body to return.
+   * @returns the fetch stub.
+   */
+  function stubNamed(body: string) {
+    const stub = vi.fn(async (input: string | URL) => {
+      if (String(input).includes('/api/studio/v1/satellite-links')) {
+        return new Response(body, { status: 409 })
+      }
+      throw new Error(`unexpected call: ${String(input)}`)
+    })
+    vi.stubGlobal('fetch', stub)
+    return stub
+  }
+
+  it('uses the id from the body and consults nothing else', async () => {
+    // The audit stub throws on any call, so reaching it fails the test rather
+    // than silently costing a permission-gated round trip.
+    const stub = stubNamed(NAMED('PENDING_APPROVAL'))
+
+    const error = await createSatelliteLink(BASE, CREDENTIALS, TYPE).catch((e: unknown) => e as Error)
+
+    expect((error as Error).message).toContain('ffff6666-0000-4000-8000-000000000006')
+    expect((error as Error).message).toContain('dsh session link --approve-id ffff6666-0000-4000-8000-000000000006')
+    expect(stub).toHaveBeenCalledTimes(1)
+  })
+
+  it('says an ACTIVE binding is ready to use, not waiting for approval', async () => {
+    stubNamed(NAMED('ACTIVE'))
+
+    const error = await createSatelliteLink(BASE, CREDENTIALS, TYPE).catch((e: unknown) => e as Error)
+
+    expect((error as Error).message).toContain('đã dùng được')
+    expect((error as Error).message).not.toContain('--approve-id')
+  })
+
+  it('remembers the id, so the next 409 needs no round trip', async () => {
+    stubNamed(NAMED('PENDING_APPROVAL'))
+
+    await createSatelliteLink(BASE, CREDENTIALS, TYPE).catch(() => undefined)
+
+    expect(recallLink(TYPE)?.id).toBe('ffff6666-0000-4000-8000-000000000006')
+  })
+
+  it('ignores an id offered under any other code', async () => {
+    // The second unique index is (satellite_type, external_user_id) and can name
+    // a row belonging to someone else, so only the code meaning "yours" is
+    // trusted. Falls through to the fallbacks instead.
+    const other = JSON.stringify({
+      detail: { code: 'satellite_link_external_conflict', id: 'dddd4444-0000-4000-8000-000000000004' },
+    })
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
+      if (String(input).includes('/api/audit/log')) return new Response('{}', { status: 403 })
+      return new Response(other, { status: 409 })
+    }))
+
+    const error = await createSatelliteLink(BASE, CREDENTIALS, TYPE).catch((e: unknown) => e as Error)
+
+    expect((error as Error).message).not.toContain('dsh session link --approve-id dddd4444')
+    expect((error as Error).message).toContain('org:audit:read')
+  })
+
+  it('falls through when the body is the older un-named 409', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
+      if (String(input).includes('/api/audit/log')) return new Response('{}', { status: 403 })
+      return new Response(CONFLICT, { status: 409 })
+    }))
+
+    const error = await createSatelliteLink(BASE, CREDENTIALS, TYPE).catch((e: unknown) => e as Error)
+
+    expect((error as Error).message).toContain('org:audit:read')
   })
 })
