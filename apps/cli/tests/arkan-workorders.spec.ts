@@ -1,5 +1,5 @@
 /**
- * `dsh run` has to answer three different refusals three different ways, and
+ * `tad run` has to answer three different refusals three different ways, and
  * the bodies below are the ones Studio actually returned during development —
  * not invented shapes. That matters here: the first version of this classifier
  * matched the phrase "lease ACTIVE" inside `explain()`'s own 422 label, which
@@ -51,7 +51,7 @@ describe('classifyLeaseRefusal', () => {
   })
 })
 
-describe('dsh workorders / dsh session run — argument parsing', () => {
+describe('tad workorders / tad session run — argument parsing', () => {
   it('routes the listing command', () => {
     expect(parse(['workorders'])).toMatchObject({ mode: 'arkan', action: 'workorders' })
   })

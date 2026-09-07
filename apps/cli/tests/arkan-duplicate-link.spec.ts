@@ -4,7 +4,7 @@
  *
  * Both indirect reads need a permission the engineer who created the binding
  * does not hold: the audit log needs `org:audit:read` and `GET /dev-machines`
- * needs `studio:machines:read`. An operator hit exactly that — `dsh session
+ * needs `studio:machines:read`. An operator hit exactly that — `tad session
  * link --approve` created the row, the approve leg 403'd, the rerun 409'd, and
  * the audit lookup answered 403 while the message said the id could not be
  * found. So the id is now written locally at creation, which needs no
@@ -136,7 +136,7 @@ describe('duplicate satellite link', () => {
     const message = await messageFor(fetchStub)
 
     expect(message).toContain('cccc3333-0000-4000-8000-000000000003')
-    expect(message).toContain('dsh session link --approve-id cccc3333-0000-4000-8000-000000000003')
+    expect(message).toContain('tad session link --approve-id cccc3333-0000-4000-8000-000000000003')
     // The local record answers it, so no permission-gated call is needed.
     expect(fetchStub.mock.calls.some(call => String(call[0]).includes('/api/audit/log'))).toBe(false)
   })
@@ -153,7 +153,7 @@ describe('duplicate satellite link', () => {
     }))
 
     expect(message).toContain('aaaa1111-0000-4000-8000-000000000001')
-    expect(message).toContain('dsh session link --approve-id aaaa1111-0000-4000-8000-000000000001')
+    expect(message).toContain('tad session link --approve-id aaaa1111-0000-4000-8000-000000000001')
     // A different tool's binding must not be offered as this one's.
     expect(message).not.toContain('bbbb2222')
     // Audit records creation, never current status, so the message may not
@@ -255,7 +255,7 @@ describe('409 that names the binding', () => {
     const error = await createSatelliteLink(BASE, CREDENTIALS, TYPE).catch((e: unknown) => e as Error)
 
     expect((error as Error).message).toContain('ffff6666-0000-4000-8000-000000000006')
-    expect((error as Error).message).toContain('dsh session link --approve-id ffff6666-0000-4000-8000-000000000006')
+    expect((error as Error).message).toContain('tad session link --approve-id ffff6666-0000-4000-8000-000000000006')
     expect(stub).toHaveBeenCalledTimes(1)
   })
 
@@ -290,7 +290,7 @@ describe('409 that names the binding', () => {
 
     const error = await createSatelliteLink(BASE, CREDENTIALS, TYPE).catch((e: unknown) => e as Error)
 
-    expect((error as Error).message).not.toContain('dsh session link --approve-id dddd4444')
+    expect((error as Error).message).not.toContain('tad session link --approve-id dddd4444')
     expect((error as Error).message).toContain('org:audit:read')
   })
 

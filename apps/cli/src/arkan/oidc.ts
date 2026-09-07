@@ -165,7 +165,7 @@ function awaitCallback(expectedState: string, signal: AbortSignal): Promise<Call
         reject(new Error(
           `Cổng ${CALLBACK_PORT} đang bị chiếm nên không nhận được callback.\n`
           + '  Cổng này CỐ ĐỊNH vì redirect URI được đăng ký sẵn trên Keycloak, không đổi được.\n'
-          + '  Thường là một tiến trình `dsh login` cũ chưa thoát. Tìm và tắt nó:\n'
+          + '  Thường là một tiến trình `tad login` cũ chưa thoát. Tìm và tắt nó:\n'
           + `    netstat -ano | findstr :${CALLBACK_PORT}`,
         ))
         return
@@ -272,7 +272,7 @@ export async function refresh(credentials: ArkanCredentials): Promise<ArkanCrede
   const next = toCredentials(credentials.authority, credentials.client_id, tokens)
   if (next.access_token === '') {
     // A 200 without a token must not overwrite a still-valid stored session.
-    throw new Error('Refresh thất bại (phản hồi không có access_token) — chạy `dsh login` lại.')
+    throw new Error('Refresh thất bại (phản hồi không có access_token) — chạy `tad login` lại.')
   }
   // Keycloak may not rotate the refresh token; keep the old one when absent.
   if (next.refresh_token === '') next.refresh_token = credentials.refresh_token
@@ -456,5 +456,5 @@ export async function deviceLogin(authority: string, clientId: string): Promise<
     if (error === 'expired_token') break
     throw new Error(`Device flow lỗi: ${error} ${field(poll.body, 'error_description')}`)
   }
-  throw new Error(`Mã xác thực đã hết hạn sau ${grant.expires_in}s — chạy lại \`dsh login --device\`.`)
+  throw new Error(`Mã xác thực đã hết hạn sau ${grant.expires_in}s — chạy lại \`tad login --device\`.`)
 }

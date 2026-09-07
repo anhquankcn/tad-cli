@@ -1,5 +1,5 @@
 /**
- * `dsh login --device` exists because the loopback flow cannot work over SSH:
+ * `tad login --device` exists because the loopback flow cannot work over SSH:
  * the callback server binds the REMOTE host's `127.0.0.1`, while the browser
  * runs on the operator's own machine, so the redirect reaches a port nothing
  * is listening on. The device grant has no redirect at all.
@@ -130,7 +130,7 @@ describe('deviceLogin', () => {
   })
 })
 
-describe('dsh login --device — argument parsing', () => {
+describe('tad login --device — argument parsing', () => {
   it('carries the flag through', () => {
     expect(parse(['login', '--device']))
       .toMatchObject({ mode: 'arkan', action: 'login', options: { device: true } })

@@ -4,19 +4,19 @@ import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
 
 /**
- * Keyless smoke for SOURCE `dsh` execution: run `apps/cli/src/bin.ts`
+ * Keyless smoke for SOURCE `tad` execution: run `apps/cli/src/bin.ts`
  * with the exact production runtime vector (`node --import tsx/esm`, the
- * vector the root `dsh` script invokes directly) and assert the
+ * vector the root `tad` script invokes directly) and assert the
  * required-config diagnostic. The Node compatibility matrix runs this
  * WHOLE file, so a Node release changing module hooks or TypeScript handling
- * breaks this gate instead of every developer's `pnpm dsh`; the built-bin
+ * breaks this gate instead of every developer's `pnpm tad`; the built-bin
  * suite covers the published `lib/` entry, not this source chain.
  */
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url))
 const dshSourceBin = 'apps/cli/src/bin.ts'
 
-describe('dsh SOURCE launcher (node --import tsx/esm)', () => {
+describe('tad SOURCE launcher (node --import tsx/esm)', () => {
   it('launches the source CLI without building', async () => {
     const rootPackage = JSON.parse(await readFile(new URL('../../../package.json', import.meta.url), 'utf8')) as {
       readonly scripts?: Record<string, string>
@@ -33,7 +33,7 @@ describe('dsh SOURCE launcher (node --import tsx/esm)', () => {
       reject: false,
     })
     if (result.timedOut) {
-      throw new Error(`dsh source launch did not exit within 25s. stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+      throw new Error(`tad source launch did not exit within 25s. stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
     }
     expect(result.exitCode).not.toBe(0)
     expect(result.stderr).toContain('--profile <name> is required')

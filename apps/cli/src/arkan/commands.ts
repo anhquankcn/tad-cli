@@ -1,6 +1,6 @@
 /**
- * Command bodies for the Arkan authentication family: `dsh login`,
- * `dsh logout`, `dsh whoami`, `dsh token`, and `dsh session register`.
+ * Command bodies for the Arkan authentication family: `tad login`,
+ * `tad logout`, `tad whoami`, `tad token`, and `tad session register`.
  *
  * Each returns a process exit code rather than calling `process.exit`, so the
  * dispatcher owns termination and these stay testable.
@@ -60,7 +60,7 @@ import {
 export interface ArkanOptions {
   authority?: string
   clientId?: string
-  /** `dsh login --device`: RFC 8628 instead of the loopback redirect. */
+  /** `tad login --device`: RFC 8628 instead of the loopback redirect. */
   device?: boolean
   studioBaseUrl?: string
   workorder?: string
@@ -135,7 +135,7 @@ function identity(credentials: ArkanCredentials): string {
  */
 async function requireFreshCredentials(): Promise<ArkanCredentials> {
   const stored = readCredentials()
-  if (stored === null) throw new Error('Chưa đăng nhập — chạy `dsh login` trước.')
+  if (stored === null) throw new Error('Chưa đăng nhập — chạy `tad login` trước.')
   if (!isExpired(stored)) return stored
   let renewed: ArkanCredentials
   try {
@@ -146,7 +146,7 @@ async function requireFreshCredentials(): Promise<ArkanCredentials> {
     // people hunting for a fault that does not exist.
     const message = (error as Error).message
     if (message.includes('invalid_grant')) {
-      throw new Error('Phiên đăng nhập đã hết hạn — chạy `dsh login` để đăng nhập lại.')
+      throw new Error('Phiên đăng nhập đã hết hạn — chạy `tad login` để đăng nhập lại.')
     }
     throw error
   }
@@ -155,7 +155,7 @@ async function requireFreshCredentials(): Promise<ArkanCredentials> {
 }
 
 /**
- * `dsh login` — interactive PKCE sign-in.
+ * `tad login` — interactive PKCE sign-in.
  * @param options - authority/client overrides.
  * @returns the process exit code.
  */
@@ -175,7 +175,7 @@ export async function runLogin(options: ArkanOptions): Promise<number> {
 }
 
 /**
- * `dsh logout` — revoke server-side, then delete the local session.
+ * `tad logout` — revoke server-side, then delete the local session.
  * @returns the process exit code.
  */
 export async function runLogout(): Promise<number> {
@@ -197,7 +197,7 @@ export async function runLogout(): Promise<number> {
 }
 
 /**
- * `dsh whoami` — print the identity behind the stored token.
+ * `tad whoami` — print the identity behind the stored token.
  * @returns the process exit code.
  */
 export async function runWhoami(): Promise<number> {
@@ -212,7 +212,7 @@ export async function runWhoami(): Promise<number> {
 }
 
 /**
- * `dsh token` — print a valid access token for scripts and curl.
+ * `tad token` — print a valid access token for scripts and curl.
  * @returns the process exit code.
  */
 export async function runToken(): Promise<number> {
@@ -222,7 +222,7 @@ export async function runToken(): Promise<number> {
 }
 
 /**
- * `dsh session link` — declare that this engineer uses DSH, which is the
+ * `tad session link` — declare that this engineer uses DSH, which is the
  * prerequisite the whole lease chain rests on: `register_machine` refuses
  * without at least one ACTIVE binding, and `issue_lease` re-checks it.
  *
@@ -248,7 +248,7 @@ export async function runSessionLink(options: ArkanOptions): Promise<number> {
     const approved = await approveSatelliteLink(baseUrlOnly, credentials, existing)
     process.stdout.write(`✅ Đã duyệt binding ${approved.satellite_type}: ${approved.status}\n\n`)
     process.stdout.write('Dùng id này cho bước xin lease:\n')
-    process.stdout.write(`  dsh session register --workorder <id> --satellite-link ${approved.id}\n`)
+    process.stdout.write(`  tad session register --workorder <id> --satellite-link ${approved.id}\n`)
     return 0
   }
 
@@ -269,7 +269,7 @@ export async function runSessionLink(options: ArkanOptions): Promise<number> {
     // told to run a command that cannot work.
     process.stdout.write('\nBinding chưa dùng được cho tới khi được duyệt. Người có quyền\n')
     process.stdout.write('studio:machines:approve chạy (KHÔNG chạy lại lệnh tạo — sẽ 409):\n')
-    process.stdout.write(`  dsh session link --approve-id ${link.id}\n`)
+    process.stdout.write(`  tad session link --approve-id ${link.id}\n`)
     return 0
   }
 
@@ -284,13 +284,13 @@ export async function runSessionLink(options: ArkanOptions): Promise<number> {
     process.stderr.write(`\n⚠️  Binding ĐÃ TẠO XONG, chỉ bước duyệt thất bại:\n  ${(error as Error).message}\n`)
     process.stderr.write('\nĐừng chạy lại lệnh này — nó sẽ tạo lại và bị 409.\n')
     process.stderr.write(`Đưa id ${link.id} cho người có quyền studio:machines:approve, họ chạy:\n`)
-    process.stderr.write(`  dsh session link --approve-id ${link.id}\n`)
+    process.stderr.write(`  tad session link --approve-id ${link.id}\n`)
     process.stderr.write(`\nId cũng đã được ghi lại ở ${linksPath()}.\n`)
     return 1
   }
   process.stdout.write(`✅ Đã duyệt: ${approved.status}\n\n`)
   process.stdout.write('Dùng id này cho bước xin lease:\n')
-  process.stdout.write(`  dsh session register --workorder <id> --satellite-link ${approved.id}\n`)
+  process.stdout.write(`  tad session register --workorder <id> --satellite-link ${approved.id}\n`)
   return 0
 }
 
@@ -334,7 +334,7 @@ function deriveFingerprint(): string {
 }
 
 /**
- * `dsh session machine` — declare this machine as a dev machine, the gate that
+ * `tad session machine` — declare this machine as a dev machine, the gate that
  * `issue_lease` checks the device fingerprint against.
  *
  * Approval is separate because it needs `studio:machines:approve` AND because
@@ -427,7 +427,7 @@ export async function runSessionMachine(options: ArkanOptions): Promise<number> 
   if (options.approve !== true) {
     process.stdout.write('Máy chưa dùng được cho tới khi được duyệt. Người có quyền\n')
     process.stdout.write('studio:machines:approve chạy (KHÔNG chạy lại lệnh đăng ký):\n')
-    process.stdout.write(`  dsh session machine --approve-id ${machine.id}\n`)
+    process.stdout.write(`  tad session machine --approve-id ${machine.id}\n`)
     return 0
   }
 
@@ -440,7 +440,7 @@ export async function runSessionMachine(options: ArkanOptions): Promise<number> 
   } catch (error) {
     process.stderr.write(`\n⚠️  Máy ĐÃ ĐĂNG KÝ XONG, chỉ bước duyệt thất bại:\n  ${(error as Error).message}\n`)
     process.stderr.write(`\nĐưa id ${machine.id} cho người có quyền studio:machines:approve, họ chạy:\n`)
-    process.stderr.write(`  dsh session machine --approve-id ${machine.id}\n`)
+    process.stderr.write(`  tad session machine --approve-id ${machine.id}\n`)
     process.stderr.write('\nChạy lại lệnh đăng ký không hỏng gì (idempotent) nhưng cũng không giúp gì.\n')
     return 1
   }
@@ -461,7 +461,7 @@ function reportApproval(approved: ApprovedMachine): void {
 }
 
 /**
- * `dsh session workorder` — create the Studio work order a lease hangs off.
+ * `tad session workorder` — create the Studio work order a lease hangs off.
  *
  * The tier is scored by the SERVER from the risk flags and is never sent: any
  * of `touches_pii|payment|auth|production_migration` is rejected outright
@@ -508,11 +508,11 @@ export async function runSessionWorkorder(options: ArkanOptions): Promise<number
   }
 
   process.stdout.write('Bước kế tiếp:\n')
-  process.stdout.write(`  dsh session register --workorder ${workorder.id} --satellite-link <uuid> --model-ref <ref ACTIVE>\n`)
+  process.stdout.write(`  tad session register --workorder ${workorder.id} --satellite-link <uuid> --model-ref <ref ACTIVE>\n`)
   return 0
 }
 /**
- * `dsh session register` — obtain an EngineLease so the relay plugin may
+ * `tad session register` — obtain an EngineLease so the relay plugin may
  * report this session's progress instead of only a heartbeat.
  * @param options - lease inputs, each also readable from the environment.
  * @returns the process exit code.
@@ -562,7 +562,7 @@ export async function runSessionRegister(options: ArkanOptions): Promise<number>
   process.stdout.write(`   lưu tại: ${sessionPath()}\n\n`)
   // The relay plugin reads process.env directly, so a session started from a
   // shell that predates this command still needs the value exported by hand.
-  process.stdout.write('Chạy dsh trong shell đã có biến này thì plugin mới gửi tiến độ:\n')
+  process.stdout.write('Chạy tad trong shell đã có biến này thì plugin mới gửi tiến độ:\n')
   process.stdout.write(`  export ARKAN_LEASE_ID=${lease.id}\n`)
   return 0
 }
@@ -576,7 +576,7 @@ export async function runSessionRegister(options: ArkanOptions): Promise<number>
  * is harmless, and silence would not do that.
  */
 const CHAIN_PERMISSIONS: readonly (readonly [string, string])[] = [
-  ['studio:read:tenant', 'liệt kê work order (dsh workorders)'],
+  ['studio:read:tenant', 'liệt kê work order (tad workorders)'],
   ['studio:write:own', 'tạo work order và xin lease'],
   ['studio:machines:read', 'xem danh sách máy — thiếu cũng KHÔNG chặn gì'],
   ['studio:machines:approve', 'duyệt binding và máy dev — thiếu là tắc'],
@@ -642,7 +642,7 @@ export function leaseLines(lease: IssuedLease): StatusLine[] {
     lines.push({
       label: 'hết hạn',
       value: `${String(lease.expires_at)} — QUÁ HẠN ${Math.abs(left)} phút`,
-      problem: 'xin lại trên CÙNG work order: dsh session register --workorder <id> ...',
+      problem: 'xin lại trên CÙNG work order: tad session register --workorder <id> ...',
     })
   }
   if (!Number.isNaN(ceiling)) {
@@ -672,7 +672,7 @@ export function leaseLines(lease: IssuedLease): StatusLine[] {
 }
 
 /**
- * `dsh status` — report every link of the tracked-session chain at once.
+ * `tad status` — report every link of the tracked-session chain at once.
  *
  * The chain has preconditions the server re-checks independently (login →
  * binding → dev machine → work order → lease → model registry), and each one
@@ -706,7 +706,7 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
     : {
       label: 'log harness',
       value: `${logPath} — chưa có`,
-      problem: 'bản dsh trước 2026-09-06 không ghi file này; cập nhật rồi chạy lại',
+      problem: 'bản tad trước 2026-09-06 không ghi file này; cập nhật rồi chạy lại',
     }]
 
   // The relay plugin is copied into each profile by hand, so profiles drift.
@@ -809,7 +809,7 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
     bindingLines.push({
       label: 'tra audit log',
       value: 'không thấy binding llm_deepseek_harness',
-      problem: 'chưa khai báo: dsh session link --approve',
+      problem: 'chưa khai báo: tad session link --approve',
     })
     problems.push('binding')
   } else {
@@ -854,7 +854,7 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
       machineLines.push({
         label: 'máy này trong Studio',
         value: machineId === '' ? '(không tra được vì thiếu ARKAN_MACHINE_ID)' : 'KHÔNG thấy id này',
-        problem: 'đăng ký: dsh session machine --generate-fingerprint --approve',
+        problem: 'đăng ký: tad session machine --generate-fingerprint --approve',
       })
       problems.push('dev machine')
     } else {
@@ -888,7 +888,7 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
     leaseSection.push({
       label: `cache (${sessionPath()})`,
       value: 'chưa có lease nào được cấp trên máy này',
-      problem: 'xin lease: dsh session register --workorder <id> --satellite-link <uuid> --model-ref <ref>',
+      problem: 'xin lease: tad session register --workorder <id> --satellite-link <uuid> --model-ref <ref>',
     })
     problems.push('lease')
   } else {
@@ -944,7 +944,7 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
  * possibilities instead of asserting either.
  */
 const UNKNOWN_WORKORDER = 'Work order không tồn tại, hoặc không thuộc về bạn, hoặc chưa đủ điều kiện chạy.\n'
-  + '  Xem danh sách chạy được: dsh workorders'
+  + '  Xem danh sách chạy được: tad workorders'
 
 /** What a lease refusal turns out to be about, once read. */
 export type RefusalKind = 'busy' | 'caller' | 'unknown-workorder'
@@ -979,7 +979,7 @@ export function classifyLeaseRefusal(message: string): RefusalKind {
 }
 
 /**
- * `dsh workorders` — list the work orders this engineer can start now.
+ * `tad workorders` — list the work orders this engineer can start now.
  *
  * Authenticated with the employee JWT plus the machine token rather than a
  * lease: this runs before any lease exists (FR-DEV-09).
@@ -1000,7 +1000,7 @@ export async function runWorkorders(options: ArkanOptions): Promise<number> {
     process.stdout.write('  Điều kiện: tier C, đã qua Value & Risk Gate, chưa có lease ACTIVE, và thuộc về bạn.\n')
     if (machineToken === '') {
       process.stdout.write('  Lưu ý: chưa đặt ARKAN_DM_TOKEN. Tenant này chưa bắt buộc máy đăng ký nên danh sách\n')
-      process.stdout.write('  vẫn trả về, nhưng `dsh run` sẽ cần máy ACTIVE — kiểm bằng: dsh status\n')
+      process.stdout.write('  vẫn trả về, nhưng `tad run` sẽ cần máy ACTIVE — kiểm bằng: tad status\n')
     }
     return 0
   }
@@ -1010,12 +1010,12 @@ export async function runWorkorders(options: ArkanOptions): Promise<number> {
   for (const item of items) {
     process.stdout.write(`  ${item.id.padEnd(idWidth)}  ${item.tier}  ${item.created_at.slice(0, 10)}  ${item.title}\n`)
   }
-  process.stdout.write(`\nChạy một cái: dsh run ${items[0]?.id ?? '<workorder_id>'}\n`)
+  process.stdout.write(`\nChạy một cái: tad run ${items[0]?.id ?? '<workorder_id>'}\n`)
   return 0
 }
 
 /**
- * `dsh run <workorder_id>` — take a work order and obtain its lease.
+ * `tad run <workorder_id>` — take a work order and obtain its lease.
  *
  * Deliberately no new lease path: this calls the same `issue_lease` every
  * other route uses, so every existing check (repo gate, fingerprint, model
@@ -1026,7 +1026,7 @@ export async function runWorkorders(options: ArkanOptions): Promise<number> {
 export async function runRun(options: ArkanOptions): Promise<number> {
   const workorderId = options.workorder ?? ''
   if (workorderId === '') {
-    process.stderr.write('Thiếu work order id: dsh run <workorder_id>\n')
+    process.stderr.write('Thiếu work order id: tad run <workorder_id>\n')
     return 2
   }
   const baseUrl = requireEndpoint(options.studioBaseUrl, 'ARKAN_STUDIO_BASE_URL', DEFAULT_STUDIO_BASE_URL, 'Arkan Studio')
@@ -1079,7 +1079,7 @@ export async function runRun(options: ArkanOptions): Promise<number> {
   process.stdout.write(`   lưu tại: ${sessionPath()}\n\n`)
   // The relay plugin reads process.env directly, so a shell that predates this
   // command still needs the value exported by hand.
-  process.stdout.write('Chạy dsh trong shell đã có biến này thì plugin mới gửi tiến độ:\n')
+  process.stdout.write('Chạy tad trong shell đã có biến này thì plugin mới gửi tiến độ:\n')
   process.stdout.write(`  export ARKAN_LEASE_ID=${lease.id}\n`)
   return 0
 }

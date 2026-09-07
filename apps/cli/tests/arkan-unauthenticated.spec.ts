@@ -5,7 +5,7 @@
  * It maps a Keycloak token to an `Employee` row BY EMAIL (`auth_service.py`:
  * `where(func.lower(Employee.email) == email)`) and raises 401 `Not
  * authenticated` when no row matches. The token is then perfectly valid — the
- * organisation simply has no record of that person — and `dsh login` cannot
+ * organisation simply has no record of that person — and `tad login` cannot
  * fix it: signing in again as the same account produces the same 401.
  *
  * That is not hypothetical. An operator created a second account in the same
@@ -50,7 +50,7 @@ describe('401 from Studio', () => {
     const message = await messageFor()
 
     expect(message).toContain('không có nhân sự nào khớp email')
-    expect(message).toContain('dsh whoami')
+    expect(message).toContain('tad whoami')
     // The old message sent people here, and re-running it changes nothing.
     expect(message).not.toContain('Token hết hạn')
   })
@@ -71,7 +71,7 @@ describe('401 from Studio', () => {
     const message = await messageFor()
 
     expect(message).toContain('Token hết hạn hoặc không hợp lệ')
-    expect(message).toContain('dsh login')
+    expect(message).toContain('tad login')
   })
 
   it('names both causes when the body is wording we do not recognise', async () => {

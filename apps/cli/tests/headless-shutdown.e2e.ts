@@ -110,10 +110,10 @@ async function runHeadlessPtySmoke(): Promise<string> {
       stripFinalNewline: false,
     })
     if (result.timedOut) {
-      throw new Error(`dsh headless PTY driver did not exit. stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+      throw new Error(`tad headless PTY driver did not exit. stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
     }
     if (result.failed) {
-      throw new Error(`dsh headless PTY driver exited ${String(result.exitCode)}. stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+      throw new Error(`tad headless PTY driver exited ${String(result.exitCode)}. stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
     }
     return result.stdout
   } finally {

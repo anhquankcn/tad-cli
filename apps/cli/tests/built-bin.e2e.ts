@@ -33,7 +33,7 @@ async function runBuiltBin(
     ...cwd === undefined ? {} : { cwd },
   })
   if (result.timedOut) {
-    throw new Error(`dsh built bin did not exit within 25s. stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+    throw new Error(`tad built bin did not exit within 25s. stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
   }
   return { stdout: result.stdout, code: result.exitCode ?? -1, stderr: result.stderr }
 }
@@ -41,7 +41,7 @@ async function runBuiltBin(
 async function waitForFile(file: string): Promise<void> {
   const deadline = Date.now() + 20_000
   while (!existsSync(file)) {
-    if (Date.now() >= deadline) throw new Error(`dsh profile lifecycle marker did not appear: ${file}`)
+    if (Date.now() >= deadline) throw new Error(`tad profile lifecycle marker did not appear: ${file}`)
     await new Promise(resolve => setTimeout(resolve, 20))
   }
 }
@@ -309,7 +309,7 @@ function startStartupProfile(fixture: StartupFixture, args: readonly string[]) {
   })
 }
 
-describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', () => {
+describe.skipIf(!existsSync(dshBin))('tad BUILT bin (node lib/bin.js, no tsx)', () => {
   it('requires --profile and rejects removed commands', async () => {
     const bare = await runBuiltBin()
     expect(bare.code).toBe(1)
@@ -317,8 +317,8 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
     expect(bare.stderr).toContain('--profile <name> is required')
     const help = await runBuiltBin(['--help'])
     expect(help.code).toBe(0)
-    expect(help.stdout).toContain('dsh --profile web')
-    expect(help.stdout).toContain('dsh plugin --profile')
+    expect(help.stdout).toContain('tad --profile web')
+    expect(help.stdout).toContain('tad plugin --profile')
     expect(help.stdout).not.toMatch(/^\s+(?:tui|meta|upgrade)\b/mu)
     for (const removed of [['tui'], ['--config', 'x.yml'], ['-p', 'task'], ['run', 'task']]) {
       const result = await runBuiltBin(removed)
@@ -335,9 +335,9 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       })
       expect(web.code).toBe(0)
       expect(web.stderr).toBe('')
-      expect(web.stdout).toContain('Usage: dsh --profile web')
+      expect(web.stdout).toContain('Usage: tad --profile web')
       expect(web.stdout).toContain('--port <port>')
-      expect(web.stdout).not.toContain('dsh web: http://')
+      expect(web.stdout).not.toContain('tad web: http://')
 
       const wildcardHost = await runBuiltBin(['web', '--host', '0.0.0.0'], {
         DSH_HOME: home,
@@ -346,7 +346,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       expect(wildcardHost.code).toBe(1)
       expect(wildcardHost.stdout).toBe('')
       expect(wildcardHost.stderr).toContain('--host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead')
-      expect(wildcardHost.stderr).not.toContain('dsh web: http://')
+      expect(wildcardHost.stderr).not.toContain('tad web: http://')
 
       const headlessHelp = await runBuiltBin(['--profile', 'headless', '--help'], {
         DSH_HOME: home,
@@ -354,7 +354,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       })
       expect(headlessHelp.code).toBe(0)
       expect(headlessHelp.stderr).toBe('')
-      expect(headlessHelp.stdout).toContain('Usage: dsh --profile headless')
+      expect(headlessHelp.stdout).toContain('Usage: tad --profile headless')
 
       const missingTask = await runBuiltBin(['--profile', 'headless'], {
         DSH_HOME: home,
@@ -411,7 +411,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       const result = await runBuiltBin(['--profile', 'nope'], { DSH_HOME: home })
       expect(result.code).toBe(1)
       expect(result.stderr).toContain('profile "nope" does not exist')
-      expect(result.stderr).toContain('dsh plugin --profile nope add')
+      expect(result.stderr).toContain('tad plugin --profile nope add')
     } finally {
       rmSync(home, { recursive: true, force: true })
     }
@@ -460,7 +460,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
   it('reports a patch-overlay boot failure without hanging', async () => {
     // The HMR main watcher's initial scan once refreshed the include
     // mid-initial-apply, deadlocking the failing apply's rollback against the
-    // refresh drain: dsh exited 13 with no diagnostic instead of settling
+    // refresh drain: tad exited 13 with no diagnostic instead of settling
     // ([Agent Note](../../../.agents/notes/implemented/bug-fix/2026-08-03-hmr-initial-scan-boot-deadlock.md)).
     const home = mkdtempSync(join(tmpdir(), 'dsh-invalid-patch-'))
     try {
@@ -623,7 +623,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
   }, 30_000)
 
   it('anchors a relative add spec to the invoking directory, not the profile', async () => {
-    // `dsh plugin --profile x add .` from a plugin checkout must install THAT
+    // `tad plugin --profile x add .` from a plugin checkout must install THAT
     // checkout — pnpm's cwd is the profile directory, so an un-anchored `.`
     // would self-link the profile.
     const home = mkdtempSync(join(tmpdir(), 'dsh-plugin-anchor-'))
@@ -688,7 +688,7 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
         dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } },
       }))
       writeFileSync(join(profileDir, 'cordis.patch.yml'), '[]\n')
-      // v1: no dsh manifest — a plain dependency.
+      // v1: no tad manifest — a plain dependency.
       writeFileSync(join(installed, 'package.json'), JSON.stringify({ name: 'late-bundle', version: '1.0.0' }))
       const first = await runBuiltBin(['plugin', '--profile', 'up', 'root'], { DSH_HOME: home })
       expect(first.code).toBe(0)

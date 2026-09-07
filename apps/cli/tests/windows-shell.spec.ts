@@ -43,7 +43,7 @@ describe('the shipped shell composition (real bundle layers)', () => {
   it('composes the confined pwsh roster on win32 and the bash roster on POSIX from the same rows', () => {
     home = mkdtempSync(join(tmpdir(), 'dsh-windows-home-'))
     initProfile(join(home, PROFILES_DIR, 'web'), ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
-    const profile = loadProfile('dsh', 'web', anchor, home)
+    const profile = loadProfile('tad', 'web', anchor, home)
     const warnings: string[] = []
     const rows = composeEntries(
       profile.layers.map(layer => layer.patches),
@@ -81,7 +81,7 @@ describe('the shipped shell composition (real bundle layers)', () => {
   it('base-only profiles carry both stacks with the same platform gating', () => {
     home = mkdtempSync(join(tmpdir(), 'dsh-windows-home-'))
     initProfile(join(home, PROFILES_DIR, 'base-only'), ['@deepseek-ai/dsh-base'])
-    const profile = loadProfile('dsh', 'base-only', anchor, home)
+    const profile = loadProfile('tad', 'base-only', anchor, home)
     const warnings: string[] = []
     const rows = composeEntries(
       profile.layers.map(layer => layer.patches),

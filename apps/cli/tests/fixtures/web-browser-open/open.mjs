@@ -24,7 +24,7 @@ export default async function open(url) {
   }
   const response = await fetch(url)
   const html = await response.text()
-  console.log(`dsh browser-open: ${JSON.stringify({
+  console.log(`tad browser-open: ${JSON.stringify({
     url,
     status: response.status,
     bootManifest: html.includes('__DSH_BOOT__'),

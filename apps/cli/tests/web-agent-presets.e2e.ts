@@ -117,7 +117,7 @@ async function bootWeb(
   healProfilesModuleFallback(INSTALL_ANCHOR, home)
   const profileDir = join(home, 'profiles', 'spec')
   await mkdir(profileDir, { recursive: true })
-  // Product Bundles are installed into the Profile, not the dsh app. Model
+  // Product Bundles are installed into the Profile, not the tad app. Model
   // pnpm's package link for only the selected products; their own production
   // dependencies resolve from the linked workspace packages, while shared
   // peers still resolve through the installation fallback above.
@@ -410,7 +410,7 @@ describe('the shipped Web composition', () => {
         agent: handle.agent,
       })
       expect(loaded.isError).toBe(false)
-      expect(JSON.stringify(loaded.content)).toContain('powered by dsh')
+      expect(JSON.stringify(loaded.content)).toContain('powered by tad')
     } finally {
       await handle.dispose()
     }

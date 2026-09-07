@@ -31,7 +31,7 @@ export const DEFAULT_STUDIO_BASE_URL = ''
 /** Same agent as the SSO calls: the WAF rejects the default one. */
 const USER_AGENT = 'arkan-cli/1.0'
 
-/** Where the issued lease is cached for the next `dsh` boot to pick up. */
+/** Where the issued lease is cached for the next `tad` boot to pick up. */
 const SESSION_PATH = join(homedir(), '.arkan', 'session.json')
 
 /**
@@ -153,7 +153,7 @@ function explainServerFault(status: number, body: string): string {
  * Studio maps a Keycloak token to an `Employee` row **by email**, and answers
  * 401 `Not authenticated` when no row matches — the token is perfectly valid,
  * the organisation simply has no record of that person. Reporting that as
- * "token expired" sends the operator to `dsh login`, which cannot help: signing
+ * "token expired" sends the operator to `tad login`, which cannot help: signing
  * in again as the same account produces the same 401.
  *
  * The server's own `detail` separates the cases, so read it rather than listing
@@ -169,17 +169,17 @@ function explainUnauthenticated(body: string): string {
   }
   if (body.includes('Not authenticated')) {
     return 'Token hợp lệ, nhưng Arkan không có nhân sự nào khớp email của tài khoản này.\n'
-      + '  Xem đang đăng nhập bằng tài khoản nào: dsh whoami\n'
-      + '  Nếu sai tài khoản: dsh logout rồi đăng nhập lại bằng tài khoản đã được cấp.\n'
+      + '  Xem đang đăng nhập bằng tài khoản nào: tad whoami\n'
+      + '  Nếu sai tài khoản: tad logout rồi đăng nhập lại bằng tài khoản đã được cấp.\n'
       + '  Nếu đúng tài khoản: nhờ quản trị viên tạo Employee với ĐÚNG email đó (so khớp không phân biệt hoa thường).\n'
       + `  ${body}`
   }
   if (body.includes('Invalid or expired token')) {
-    return 'Token hết hạn hoặc không hợp lệ — chạy `dsh login` lại.'
+    return 'Token hết hạn hoặc không hợp lệ — chạy `tad login` lại.'
   }
   return 'Không xác thực được (401). Hai nguyên nhân thường gặp:\n'
-    + '  · token hết hạn hoặc không hợp lệ — chạy `dsh login` lại;\n'
-    + '  · Arkan chưa có nhân sự khớp email của tài khoản — kiểm bằng `dsh whoami`.\n'
+    + '  · token hết hạn hoặc không hợp lệ — chạy `tad login` lại;\n'
+    + '  · Arkan chưa có nhân sự khớp email của tài khoản — kiểm bằng `tad whoami`.\n'
     + `  ${body}`
 }
 
@@ -330,13 +330,13 @@ export async function listAvailableWorkorders(
 function explainAvailable(status: number, body: string): string {
   if (status === 401 && body.includes('machine token')) {
     return 'Tenant yêu cầu máy đã đăng ký, mà machine token thiếu hoặc máy chưa ACTIVE.\n'
-      + '  Đăng ký và duyệt máy: dsh session machine --generate-fingerprint --approve\n'
+      + '  Đăng ký và duyệt máy: tad session machine --generate-fingerprint --approve\n'
       + `  ${body}`
   }
   if (status === 401) return explainUnauthenticated(body)
   if (status === 403 && body.includes('ADR-DEV-02')) {
     return 'Machine token thuộc máy của kỹ sư khác — mỗi máy gắn với một kỹ sư.\n'
-      + `  Đăng ký máy này cho chính bạn: dsh session machine --generate-fingerprint --approve\n  ${body}`
+      + `  Đăng ký máy này cho chính bạn: tad session machine --generate-fingerprint --approve\n  ${body}`
   }
   if (status === 403) return `Thiếu quyền studio:read:tenant.\n  ${body}`
   if (status === 422) return `Studio từ chối tham số: ${body}`
@@ -519,7 +519,7 @@ function explainMissingPermission(body: string): string {
   if (needed === 'studio:machines:read') {
     return 'Không xem được danh sách máy — cần quyền `studio:machines:read`.\n'
       + '  Đây là màn quản trị. Việc của bạn KHÔNG cần nó: đăng ký máy\n'
-      + '  (`dsh session machine`) và xin lease đều không gọi route này.\n'
+      + '  (`tad session machine`) và xin lease đều không gọi route này.\n'
       + '  Máy chủ vẫn tự đối chiếu fingerprint khi cấp lease.\n'
       + `  ${body}`
   }
@@ -537,7 +537,7 @@ function explainMachine(status: number, body: string): string {
   if (status === 401) return explainUnauthenticated(body)
   if (status === 403 && body.includes('satellite_identity_link')) {
     return 'Chưa có binding danh tính ACTIVE — máy chưa đăng ký được.\n'
-      + '  Chạy `dsh session link --approve` trước (FR-TEN-07).\n  ' + body
+      + '  Chạy `tad session link --approve` trước (FR-TEN-07).\n  ' + body
   }
   if (status === 403) return explainMissingPermission(body)
   if (status === 404) return 'Máy không tồn tại (hoặc thuộc tenant khác).'
@@ -707,7 +707,7 @@ function explainLink(status: number, body: string): string {
       + '    · nhờ người có quyền `org:audit:read` tra audit log (action\n'
       + '      satellite_link_create), hoặc người có quyền DB tra bảng\n'
       + '      satellite_identity_link theo employee_id của bạn\n'
-      + '  Có id rồi: dsh session link --approve-id <uuid>'
+      + '  Có id rồi: tad session link --approve-id <uuid>'
   }
   if (status === 422) return `Binding không ở trạng thái PENDING_APPROVAL nên không duyệt được.\n  ${body}`
   if (status === 503) return `Máy chủ chưa cấu hình khoá mã hoá vệ tinh (fail-closed).\n  ${body}`
@@ -891,7 +891,7 @@ export async function findLinkIdsInAudit(
   // The audit log is TENANT-WIDE. Without `principal_id` the newest
   // `satellite_link_create` in the whole tenant comes back, and this function
   // then offers a colleague's binding id as the caller's own. That happened:
-  // an operator's `dsh status` named a row belonging to a different employee,
+  // an operator's `tad status` named a row belonging to a different employee,
   // beside the correct one from the local cache. Scoping is not optional, so a
   // principal that cannot be established means reporting nothing at all rather
   // than reporting something that may not be theirs.
@@ -971,8 +971,8 @@ async function explainDuplicateLink(
       + `    trạng thái : ${named.status}\n`
       + (named.status === 'PENDING_APPROVAL'
         ? '  Nó chờ người khác duyệt (FR-TEN-07) — đưa id trên cho người có\n'
-          + `  quyền studio:machines:approve, họ chạy:\n    dsh session link --approve-id ${named.id}\n`
-        : '  Nó đã dùng được — truyền thẳng id đó cho `dsh session register --satellite-link`.\n')
+          + `  quyền studio:machines:approve, họ chạy:\n    tad session link --approve-id ${named.id}\n`
+        : '  Nó đã dùng được — truyền thẳng id đó cho `tad session register --satellite-link`.\n')
   }
 
   // The local record next: it needs no permission either, but it only knows
@@ -983,8 +983,8 @@ async function explainDuplicateLink(
       + `    ${remembered.id}\n`
       + `  (ghi trong ${linksFile()}; trạng thái lúc tạo: ${remembered.status_at_create})\n`
       + '  Nếu còn PENDING_APPROVAL, người có quyền studio:machines:approve chạy:\n'
-      + `    dsh session link --approve-id ${remembered.id}\n`
-      + '  Nếu đã ACTIVE thì dùng thẳng id đó cho `dsh session register --satellite-link`.'
+      + `    tad session link --approve-id ${remembered.id}\n`
+      + '  Nếu đã ACTIVE thì dùng thẳng id đó cho `tad session register --satellite-link`.'
   }
 
   const { ids, denied } = await findLinkIdsInAudit(baseUrl, credentials, satelliteType)
@@ -997,7 +997,7 @@ async function explainDuplicateLink(
       + '    · nhờ người có quyền `org:audit:read` tra audit log, action\n'
       + '      satellite_link_create, hoặc người có quyền DB tra bảng\n'
       + '      satellite_identity_link theo employee_id của bạn\n'
-      + '  Có id rồi: dsh session link --approve-id <uuid>'
+      + '  Có id rồi: tad session link --approve-id <uuid>'
   }
   if (ids.length === 0) return explainLink(409, body)
   // The audit log records creations, never the current status, so the binding
@@ -1006,13 +1006,13 @@ async function explainDuplicateLink(
   if (ids.length === 1) {
     return `${headWithBody}  Tra audit log ra binding: ${ids[0]}\n`
       + '  Nếu nó còn PENDING_APPROVAL thì duyệt bằng:\n'
-      + `    dsh session link --approve-id ${ids[0]}\n`
-      + '  Nếu đã ACTIVE thì dùng thẳng id đó cho `dsh session register --satellite-link`.'
+      + `    tad session link --approve-id ${ids[0]}\n`
+      + '  Nếu đã ACTIVE thì dùng thẳng id đó cho `tad session register --satellite-link`.'
   }
   const list = ids.slice(0, 5).map(id => `    · ${id}`).join('\n')
   return `${headWithBody}  Tra audit log ra ${ids.length} binding cùng loại, mới nhất trước:\n${list}\n`
     + '  Audit chỉ ghi lúc tạo, không ghi trạng thái hiện tại — cái chưa thu hồi\n'
-    + '  thường là cái mới nhất. Duyệt: dsh session link --approve-id <uuid>'
+    + '  thường là cái mới nhất. Duyệt: tad session link --approve-id <uuid>'
 }
 
 /**
@@ -1042,7 +1042,7 @@ export async function approveSatelliteLink(
 }
 
 /**
- * Cache the lease so a later `dsh` boot can export it to the relay plugin
+ * Cache the lease so a later `tad` boot can export it to the relay plugin
  * without the operator pasting it into the environment by hand.
  * @param lease - the lease just issued.
  */

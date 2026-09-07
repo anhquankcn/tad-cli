@@ -1,5 +1,5 @@
 /**
- * `dsh status` reads the lease from `~/.arkan/session.json`, which is the only
+ * `tad status` reads the lease from `~/.arkan/session.json`, which is the only
  * local record of what was issued — and a record that keeps saying ACTIVE long
  * after the lease died, because nothing rewrites it when the clock passes
  * `expires_at`. Trusting that field is exactly the mistake that leaves an
@@ -42,7 +42,7 @@ function flat(lines: ReturnType<typeof leaseLines>): string {
   return lines.map(line => `${line.label} ${line.value} ${line.problem ?? ''}`).join('\n')
 }
 
-describe('dsh status — lease reporting', () => {
+describe('tad status — lease reporting', () => {
   it('reports a live lease with the minutes it has left', () => {
     const text = flat(leaseLines(lease(90)))
 
@@ -57,7 +57,7 @@ describe('dsh status — lease reporting', () => {
     const text = flat(leaseLines(lease(-462)))
 
     expect(text).toContain('QUÁ HẠN 462 phút')
-    expect(text).toContain('dsh session register')
+    expect(text).toContain('tad session register')
     // The whole point: the cached ACTIVE must be contradicted, not echoed.
     expect(text).toContain('KHÔNG đáng tin')
   })
@@ -86,7 +86,7 @@ describe('dsh status — lease reporting', () => {
   })
 })
 
-describe('dsh status — argument parsing', () => {
+describe('tad status — argument parsing', () => {
   it('routes the bare command', () => {
     expect(parse(['status'])).toMatchObject({ mode: 'arkan', action: 'status' })
   })

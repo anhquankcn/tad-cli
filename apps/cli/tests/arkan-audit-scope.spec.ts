@@ -2,7 +2,7 @@
  * The audit log is tenant-wide, so a `satellite_link_create` lookup without
  * `principal_id` returns the newest such row in the WHOLE tenant.
  *
- * That is not theoretical. An operator's `dsh status` printed a binding id
+ * That is not theoretical. An operator's `tad status` printed a binding id
  * belonging to a different employee, right beside the correct one recovered
  * from the local cache — the same class of cross-employee disclosure the
  * server review closed on `POST /satellite-links` (ARKAN-CR-DEV-022).
