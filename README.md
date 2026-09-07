@@ -5,8 +5,8 @@
 > **Cài lên máy mới.** Cần Node >= 24 — đây là ngưỡng cứng, Node 22 làm build đổ với thông báo lạc hướng.
 >
 > ```sh
-> git clone https://github.com/anhquankcn/arkan-dsh.git ~/arkan-dsh
-> ~/arkan-dsh/install/install.sh --skip-clone --dir ~/arkan-dsh
+> git clone https://github.com/anhquankcn/tad-cli.git ~/tad-cli
+> ~/tad-cli/install/install.sh --skip-clone --dir ~/tad-cli
 > ```
 >
 > Windows dùng `install\install.ps1 -SkipClone -Dir <đường-dẫn>`. Script chạy lại nhiều lần được và không bao giờ ghi credential thật. Chi tiết cùng cách gỡ rối nằm trong `install/README.md`.
@@ -29,10 +29,14 @@
 >
 > ```sh
 > dsh login
-> dsh session link --approve
-> dsh session machine --generate-fingerprint --approve
+> dsh session link
+> dsh session machine --generate-fingerprint
 > dsh session workorder --title T --description D --repo R --checklist ...
 > ```
+>
+> Hai bước giữa in ra một id rồi dừng: duyệt binding và duyệt máy dev cần quyền `studio:machines:approve`, và người tự khai không phải người duyệt. Đưa id cho người có quyền chạy `--approve-id <id>`. Machine token do bước duyệt sinh ra và chỉ hiện một lần ở phía họ, nên họ phải chuyển lại cho bạn.
+>
+> Viết work order sao cho qua được cổng thẩm định — và vì sao hai trong ba bậc rủi ro không chạy được: `install/WORKORDER.md`.
 >
 > Đang SSH vào máy chạy lệnh thì `dsh login` không xong được: listener nằm trên `127.0.0.1` của máy remote, còn trình duyệt ở máy bạn. Dùng device flow, không cần trình duyệt trên máy đó:
 >
@@ -55,7 +59,9 @@
 > dsh session run <workorder_id>
 > ```
 >
-> Và `dsh status` soi cả sáu mắt của chuỗi trong một lần chạy, gọi tên mắt đang hỏng kèm lệnh sửa — nên chạy nó trước khi đoán bất cứ điều gì.
+> Và `dsh status` soi cả chuỗi trong một lần chạy — chẩn đoán, đăng nhập, quyền, binding, máy dev, work order, lease, Model Registry — gọi tên mắt đang hỏng kèm lệnh sửa. Chạy nó trước khi đoán bất cứ điều gì.
+>
+> Mục **CHẨN ĐOÁN** in đầu tiên, trên cả nhánh "chưa đăng nhập", vì lúc không đăng nhập được cũng là lúc cần log nhất. Nó cho đường dẫn `~/.dsh/logs/dsh.log` — nơi plugin ghi thay vì ghi ra màn hình, vì một dòng ghi thô sẽ đè lên khung TUI đang vẽ.
 >
 > Hướng dẫn từng bước cho máy mới: `arkan-docs/RUNBOOK-DSH-DEV.md`.
 >

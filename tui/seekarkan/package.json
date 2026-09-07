@@ -15,11 +15,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anhquankcn/arkan-dsh.git",
+    "url": "git+https://github.com/anhquankcn/tad-cli.git",
     "directory": "tui/seekarkan"
   },
-  "homepage": "https://github.com/anhquankcn/arkan-dsh/tree/main/tui/seekarkan",
-  "bugs": "https://github.com/anhquankcn/arkan-dsh/issues",
+  "homepage": "https://github.com/anhquankcn/tad-cli/tree/main/tui/seekarkan",
+  "bugs": "https://github.com/anhquankcn/tad-cli/issues",
   "packageManager": "pnpm@11.7.0",
   "engines": {
     "node": "^22.19.0 || >=24"

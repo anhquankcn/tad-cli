@@ -5,8 +5,8 @@
 > **在新机器上安装。** 需要 Node >= 24，这是硬性要求：Node 22 会让构建失败并给出误导性的报错。
 >
 > ```sh
-> git clone https://github.com/anhquankcn/arkan-dsh.git ~/arkan-dsh
-> ~/arkan-dsh/install/install.sh --skip-clone --dir ~/arkan-dsh
+> git clone https://github.com/anhquankcn/tad-cli.git ~/tad-cli
+> ~/tad-cli/install/install.sh --skip-clone --dir ~/tad-cli
 > ```
 >
 > Windows 使用 `install\install.ps1 -SkipClone -Dir <路径>`。脚本可重复运行，且从不写入真实凭据。详细说明与排错见 `install/README.md`。
@@ -29,10 +29,14 @@
 >
 > ```sh
 > dsh login
-> dsh session link --approve
-> dsh session machine --generate-fingerprint --approve
+> dsh session link
+> dsh session machine --generate-fingerprint
 > dsh session workorder --title T --description D --repo R --checklist ...
 > ```
+>
+> 中间两步只会打印一个 id 然后停下：审批绑定与审批开发机需要 `studio:machines:approve` 权限，而自行申报的人不应是审批的人。把 id 交给有权限的人执行 `--approve-id <id>`。machine token 由审批那一步生成且只显示一次，显示在他们那一侧，因此需要他们回传给你。
+>
+> 如何写出能通过价值与风险闸门的 work order，以及为什么三个风险等级中有两个无法运行：`install/WORKORDER.md`。
 >
 > 若你通过 SSH 登录到运行命令的机器，`dsh login` 无法完成：监听器位于远程机器的 `127.0.0.1`，而浏览器在你本地。改用 device flow，无需该机器上有浏览器：
 >
@@ -55,7 +59,9 @@
 > dsh session run <workorder_id>
 > ```
 >
-> 而 `dsh status` 一次检查链条全部六个环节，指名当前断掉的那一环并给出修复命令——在猜测之前先跑它。
+> 而 `dsh status` 一次检查整条链——诊断、登录、权限、绑定、开发机、work order、lease、Model Registry——指名当前断掉的那一环并给出修复命令。在猜测之前先跑它。
+
+> **诊断**一节最先打印，位于"未登录"短路之前，因为登录不上的时候恰恰最需要日志。它给出 `~/.dsh/logs/dsh.log` 的路径——插件写日志的地方，而不是写到屏幕上，因为一行裸写会覆盖正在绘制的 TUI 画面。
 >
 > 新机器的分步指南：`arkan-docs/RUNBOOK-DSH-DEV.md`。
 >

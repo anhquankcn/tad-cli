@@ -2,13 +2,13 @@
 
 ```sh
 # Linux / macOS
-git clone https://github.com/anhquankcn/arkan-dsh.git ~/arkan-dsh
-~/arkan-dsh/install/install.sh --skip-clone --dir ~/arkan-dsh
+git clone https://github.com/anhquankcn/tad-cli.git ~/tad-cli
+~/tad-cli/install/install.sh --skip-clone --dir ~/tad-cli
 ```
 
 ```powershell
 # Windows
-git clone https://github.com/anhquankcn/arkan-dsh.git $HOME\arkan-dsh
+git clone https://github.com/anhquankcn/tad-cli.git $HOME\tad-cli
 & $HOME\arkan-dsh\install\install.ps1 -SkipClone -Dir $HOME\arkan-dsh
 ```
 
@@ -124,8 +124,8 @@ Biến ngôn ngữ là `SEEKARKAN_LANG` (hoặc `SEEKTTY_LANG` cho tương thíc
 ## Cập nhật về sau
 
 ```sh
-cd ~/arkan-dsh && git pull
-bash install/install.sh --skip-clone --dir ~/arkan-dsh
+cd ~/tad-cli && git pull
+bash install/install.sh --skip-clone --dir ~/tad-cli
 ```
 
 Chạy qua `bash` cho chắc: bản clone trước 2026-09-06 nhận `install.sh` với mode

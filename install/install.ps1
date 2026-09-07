@@ -19,7 +19,7 @@ $ErrorActionPreference = 'Stop'
 # Console Windows mac dinh khong dung UTF-8, nen moi thong bao tieng Viet se hien
 # vo neu khong dat. Chi doi encoding cua tien trinh nay, khong dong toi he thong.
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
-$RepoUrl = 'https://github.com/anhquankcn/arkan-dsh.git'
+$RepoUrl = 'https://github.com/anhquankcn/tad-cli.git'
 $DshHome = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $HOME '.dsh' }
 
 # Node 24 là NGƯỠNG CỨNG, không phải khuyến nghị: trên Node 22, tsdown rơi sang

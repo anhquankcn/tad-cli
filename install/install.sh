@@ -9,7 +9,7 @@
 #   ./install/install.sh --skip-clone         # đã có mã nguồn sẵn
 set -euo pipefail
 
-REPO_URL="https://github.com/anhquankcn/arkan-dsh.git"
+REPO_URL="https://github.com/anhquankcn/tad-cli.git"
 INSTALL_DIR="${HOME}/arkan-dsh"
 DSH_HOME="${DSH_HOME:-${HOME}/.dsh}"
 SKIP_CLONE=0
