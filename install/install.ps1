@@ -91,8 +91,8 @@ if ($LASTEXITCODE -ne 0) { Die 'pnpm build thất bại.' }
 if (-not (Test-Path 'apps\cli\lib\bin.js')) { Die 'Build xong nhưng không thấy apps\cli\lib\bin.js.' }
 Ok 'build xong'
 
-# ── 4. Lệnh dsh ─────────────────────────────────────────────────────────────
-Say 'Cài lệnh dsh'
+# ── 4. Lệnh tad ─────────────────────────────────────────────────────────────
+Say 'Cài lệnh tad'
 
 $binDir = Join-Path $env:APPDATA 'npm'
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
@@ -103,15 +103,15 @@ $binJs = (Join-Path $Dir 'apps\cli\lib\bin.js')
 @echo off
 REM Shim goi TAD CLI tu ban da build. Sua ma nguon xong phai chay 'pnpm build'.
 node "$binJs" %*
-"@ | Set-Content -Path (Join-Path $binDir 'dsh.cmd') -Encoding ASCII
+"@ | Set-Content -Path (Join-Path $binDir 'tad.cmd') -Encoding ASCII
 
 $posix = $binJs -replace '\\', '/'
 @"
 #!/bin/sh
 exec node "$posix" "`$@"
-"@ | Set-Content -Path (Join-Path $binDir 'dsh') -Encoding ASCII -NoNewline:$false
+"@ | Set-Content -Path (Join-Path $binDir 'tad') -Encoding ASCII -NoNewline:$false
 
-Ok "đã ghi $binDir\dsh.cmd và \dsh"
+Ok "đã ghi $binDir\tad.cmd và \tad"
 if ($env:PATH -split ';' -contains $binDir) { Ok "$binDir đã có trên PATH" }
 else { Warn "$binDir CHƯA có trên PATH — thêm vào biến môi trường người dùng." }
 
@@ -139,7 +139,7 @@ Write-Profile 'headless' @"
 {
   "name": "dsh-profile-headless",
   "private": true,
-  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"] } }
+  "tad": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"] } }
 }
 "@
 
@@ -150,7 +150,7 @@ Write-Profile 'tui' @"
 {
   "name": "dsh-profile-tui",
   "private": true,
-  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "seekarkan"] } },
+  "tad": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "seekarkan"] } },
   "dependencies": { "seekarkan": "link:$linkPath" }
 }
 "@
@@ -174,8 +174,8 @@ refs:
 Say 'Kiểm chứng'
 
 $version = & node $binJs --version 2>&1 | Select-Object -First 1
-if ($LASTEXITCODE -ne 0) { Die 'dsh --version không chạy.' }
-Ok "dsh --version -> $version"
+if ($LASTEXITCODE -ne 0) { Die 'tad --version không chạy.' }
+Ok "tad --version -> $version"
 
 foreach ($p in @('headless', 'tui')) {
   $err = & node $binJs --profile $p --dump-config 2>&1 | Out-String
@@ -193,12 +193,12 @@ Write-Host @"
    Còn hai việc phải làm bằng tay, vì chúng cần quyết định của bạn:
 
    1. Thêm route model vào $DshHome\profiles\<tên>\cordis.patch.yml
-      Chưa có route thì dsh không gọi được model nào. Xem
+      Chưa có route thì tad không gọi được model nào. Xem
       install\README.md để biết khuôn tối thiểu.
 
    2. Điền khoá vào $cred
 
-   Mở TUI:   `$env:SEEKARKAN_LANG='vi'; dsh --profile tui
+   Mở TUI:   `$env:SEEKARKAN_LANG='vi'; tad --profile tui
    Lưu ý biến ngôn ngữ KHÔNG phải TAD_LANG dù giao diện tên là TAD.
    Không đặt thì giao diện ra tiếng Trung.
 "@

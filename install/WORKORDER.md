@@ -28,7 +28,7 @@ Cờ trong `--risk` quyết định bậc:
 | không cờ nào | **C** | Chạy được |
 
 Bậc B là cái bẫy âm thầm: work order tạo thành công, trông hoàn toàn bình
-thường, và **không bao giờ xuất hiện** trong `dsh workorders`. Thấy triệu chứng
+thường, và **không bao giờ xuất hiện** trong `tad workorders`. Thấy triệu chứng
 đó thì kiểm lại cờ đã khai trước khi nghi ngờ chỗ khác.
 
 Với repo chứa dữ liệu cá nhân — nhân sự, khách hàng, y tế — phần lớn công việc
@@ -45,7 +45,7 @@ khác. Đừng bỏ cờ để lấy bậc C.
 ## Lệnh
 
 ```sh
-dsh session workorder \
+tad session workorder \
   --title "Sửa bố cục màn hình danh sách trên màn hẹp" \
   --description "Bảng vỡ layout dưới 768px: cột tràn ngang, thanh cuộn ngang che hàng cuối. Chỉ sửa CSS và cấu trúc bảng ở tầng hiển thị. Không đụng truy vấn, không đọc thêm trường nào, không đổi model." \
   --repo "org/ten-repo" \
@@ -84,14 +84,14 @@ thành "thiếu mục đó" phía máy chủ, và thông báo sẽ chỉ sai ngu
 ## Sau khi tạo
 
 ```sh
-dsh workorders                 # work order nào chạy được
-dsh session run <workorder_id> # nhận lease cho một cái
+tad workorders                 # work order nào chạy được
+tad session run <workorder_id> # nhận lease cho một cái
 ```
 
-`dsh workorders` chỉ hiện work order thoả cả ba: bậc C đã qua cổng, chưa có lease
+`tad workorders` chỉ hiện work order thoả cả ba: bậc C đã qua cổng, chưa có lease
 ACTIVE, và thuộc về bạn. Danh sách rỗng thì nó nói lý do chứ không im lặng.
 
-Lease sống 4 giờ, trần tuyệt đối 24 giờ. Hết hạn thì chạy lại `dsh session run`
+Lease sống 4 giờ, trần tuyệt đối 24 giờ. Hết hạn thì chạy lại `tad session run`
 trên **cùng work order cũ** — không cần tạo cái mới.
 
 ---
@@ -104,5 +104,5 @@ tạo lại.
 **Bậc A bị từ chối** — không phải lỗi, là thiết kế. Việc chạm dữ liệu cá nhân,
 tiền, xác thực hay migration production đi đường khác, không qua chuỗi này.
 
-**Tạo được nhưng `dsh workorders` không thấy** — nhiều khả năng bậc B. Kiểm lại
+**Tạo được nhưng `tad workorders` không thấy** — nhiều khả năng bậc B. Kiểm lại
 cờ đã khai.

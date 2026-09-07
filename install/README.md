@@ -43,12 +43,12 @@ gắn theo từng bản Node.
 1. Kiểm git, Node >= 24, corepack/pnpm
 2. Clone (hoặc dùng kho có sẵn), `pnpm install --frozen-lockfile`, `pnpm build`
 3. Kiểm bản vá `pi-tui` đã áp chưa
-4. Cài lệnh `dsh` (Linux: `~/.local/bin`; Windows: `%APPDATA%\npm`, cả `.cmd` lẫn
+4. Cài lệnh `tad` (Linux: `~/.local/bin`; Windows: `%APPDATA%\npm`, cả `.cmd` lẫn
    shim `sh` cho Git Bash)
 5. Dựng profile `headless` và `tui`, `pnpm install` trong từng cái (phải là
    pnpm: `link:` là cú pháp pnpm, npm từ chối với `EUNSUPPORTEDPROTOCOL`)
 6. Tạo `~/.dsh/.credentials.yaml` rỗng nếu chưa có
-7. Kiểm `dsh --version` và compose được cả hai profile
+7. Kiểm `tad --version` và compose được cả hai profile
 
 ## Hai việc script KHÔNG làm
 
@@ -56,7 +56,7 @@ Cả hai đều cần quyết định của người cài, nên script không t�
 
 ### 1. Route model
 
-Chưa có route thì `dsh` không gọi được model nào. Khuôn tối thiểu, ghi vào
+Chưa có route thì `tad` không gọi được model nào. Khuôn tối thiểu, ghi vào
 `~/.dsh/profiles/<tên>/cordis.patch.yml`:
 
 ```yaml
@@ -105,16 +105,16 @@ refs:
 ## Chạy
 
 ```sh
-dsh --profile headless "câu hỏi"          # một tác vụ rồi thoát
-SEEKARKAN_LANG=vi dsh --profile tui       # giao diện terminal (sh)
-dsh web                                    # giao diện trình duyệt
+tad --profile headless "câu hỏi"          # một tác vụ rồi thoát
+SEEKARKAN_LANG=vi tad --profile tui       # giao diện terminal (sh)
+tad web                                    # giao diện trình duyệt
 ```
 
 Trên PowerShell **không có** cú pháp `VAR=value lệnh`; phải đặt biến riêng:
 
 ```powershell
 $env:SEEKARKAN_LANG = 'vi'
-dsh --profile tui
+tad --profile tui
 ```
 
 Biến ngôn ngữ là `SEEKARKAN_LANG` (hoặc `SEEKTTY_LANG` cho tương thích ngược) —
@@ -142,15 +142,15 @@ trong đó hai bậc không chạy được — nằm trong `install/WORKORDER.m
 Plugin ghi chẩn đoán vào `~/.dsh/logs/dsh.log`, không ghi ra màn hình — một dòng
 ghi thô sẽ đè lên khung TUI đang vẽ. File tự xoay vòng một thế hệ khi quá 4MB.
 
-`dsh status` in đường dẫn đó ở mục **CHẨN ĐOÁN**, ngay đầu báo cáo. Nếu mục đó
-báo file "chưa có" thì bản dsh của bạn cũ hơn 2026-09-06: khi ấy harness chưa
+`tad status` in đường dẫn đó ở mục **CHẨN ĐOÁN**, ngay đầu báo cáo. Nếu mục đó
+báo file "chưa có" thì bản tad của bạn cũ hơn 2026-09-06: khi ấy harness chưa
 đăng ký sink nào, nên mọi thứ plugin ghi qua `ctx.logger` đều bị vứt.
 
 ## Kiểm tra khi có trục trặc
 
 ```sh
-dsh status                           # chuỗi quản trị + đường dẫn log
-dsh --profile tui --dump-config      # xem cây plugin đã compose
+tad status                           # chuỗi quản trị + đường dẫn log
+tad --profile tui --dump-config      # xem cây plugin đã compose
 ls node_modules/.pnpm | grep pi-tui  # phải thấy bản có hậu tố hash
 ```
 
@@ -158,5 +158,5 @@ Thấy `@mariozechner+pi-tui@0.73.1` trơn (không hậu tố) là bản vá ch�
 sẽ xoá trắng màn hình mỗi lần vẽ lại. Bản vá khai ở `pnpm-workspace.yaml` **gốc**
 — file `pnpm-workspace.yaml` lồng trong `tui/seekarkan/` bị pnpm bỏ qua.
 
-Sửa mã nguồn xong phải `pnpm build` thì lệnh `dsh` mới đổi — shim trỏ vào bản đã
-build. Muốn thấy thay đổi ngay thì chạy `pnpm dsh --profile ...` trong kho.
+Sửa mã nguồn xong phải `pnpm build` thì lệnh `tad` mới đổi — shim trỏ vào bản đã
+build. Muốn thấy thay đổi ngay thì chạy `pnpm tad --profile ...` trong kho.

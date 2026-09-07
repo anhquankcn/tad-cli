@@ -14,12 +14,12 @@
 > **Dùng.**
 >
 > ```sh
-> dsh --profile headless "cau hoi"
-> SEEKARKAN_LANG=vi dsh --profile tui
-> dsh web
+> tad --profile headless "cau hoi"
+> SEEKARKAN_LANG=vi tad --profile tui
+> tad web
 > ```
 >
-> Trên PowerShell, cú pháp `VAR=value lệnh` không tồn tại — phải đặt biến riêng: `$env:SEEKARKAN_LANG = 'vi'; dsh --profile tui`.
+> Trên PowerShell, cú pháp `VAR=value lệnh` không tồn tại — phải đặt biến riêng: `$env:SEEKARKAN_LANG = 'vi'; tad --profile tui`.
 >
 > Biến ngôn ngữ là `SEEKARKAN_LANG`, không phải `TAD_LANG` dù giao diện mang tên TAD. Không đặt thì giao diện ra tiếng Trung. Biến chỉ có tác dụng với `--profile tui`, và được đọc một lần lúc nạp nên đổi xong phải khởi động lại.
 >
@@ -28,38 +28,38 @@
 > Bốn bước đầu là **dựng một lần cho mỗi máy**; mỗi bước là điều kiện tiên quyết được máy chủ kiểm lại ở bước sau, nên phải theo thứ tự. Máy đã đăng ký rồi thì bỏ qua `session machine`.
 >
 > ```sh
-> dsh login
-> dsh session link
-> dsh session machine --generate-fingerprint
-> dsh session workorder --title T --description D --repo R --checklist ...
+> tad login
+> tad session link
+> tad session machine --generate-fingerprint
+> tad session workorder --title T --description D --repo R --checklist ...
 > ```
 >
 > Hai bước giữa in ra một id rồi dừng: duyệt binding và duyệt máy dev cần quyền `studio:machines:approve`, và người tự khai không phải người duyệt. Đưa id cho người có quyền chạy `--approve-id <id>`. Machine token do bước duyệt sinh ra và chỉ hiện một lần ở phía họ, nên họ phải chuyển lại cho bạn.
 >
 > Viết work order sao cho qua được cổng thẩm định — và vì sao hai trong ba bậc rủi ro không chạy được: `install/WORKORDER.md`.
 >
-> Đang SSH vào máy chạy lệnh thì `dsh login` không xong được: listener nằm trên `127.0.0.1` của máy remote, còn trình duyệt ở máy bạn. Dùng device flow, không cần trình duyệt trên máy đó:
+> Đang SSH vào máy chạy lệnh thì `tad login` không xong được: listener nằm trên `127.0.0.1` của máy remote, còn trình duyệt ở máy bạn. Dùng device flow, không cần trình duyệt trên máy đó:
 >
 > ```sh
-> dsh login --device
+> tad login --device
 > ```
 >
 > Bước thứ năm là **mỗi phiên**, vì lease chỉ sống 4 giờ (trần 24 giờ):
 >
 > ```sh
-> dsh session register --workorder ID --satellite-link UUID --model-ref REF
+> tad session register --workorder ID --satellite-link UUID --model-ref REF
 > ```
 >
 > Lease hết hạn thì chạy lại đúng lệnh đó trên **cùng work order cũ** — không cần tạo work order mới, không cần thu hồi gì. Lease quá hạn được đánh dấu hết hiệu lực ngay trong giao dịch cấp lease mới.
 >
-> Có cách gọn hơn, không phải nhớ ba id: `dsh workorders` liệt kê work order chạy được, `dsh session run <id>` nhận lease cho một cái.
+> Có cách gọn hơn, không phải nhớ ba id: `tad workorders` liệt kê work order chạy được, `tad session run <id>` nhận lease cho một cái.
 >
 > ```sh
-> dsh workorders
-> dsh session run <workorder_id>
+> tad workorders
+> tad session run <workorder_id>
 > ```
 >
-> Và `dsh status` soi cả chuỗi trong một lần chạy — chẩn đoán, đăng nhập, quyền, binding, máy dev, work order, lease, Model Registry — gọi tên mắt đang hỏng kèm lệnh sửa. Chạy nó trước khi đoán bất cứ điều gì.
+> Và `tad status` soi cả chuỗi trong một lần chạy — chẩn đoán, đăng nhập, quyền, binding, máy dev, work order, lease, Model Registry — gọi tên mắt đang hỏng kèm lệnh sửa. Chạy nó trước khi đoán bất cứ điều gì.
 >
 > Mục **CHẨN ĐOÁN** in đầu tiên, trên cả nhánh "chưa đăng nhập", vì lúc không đăng nhập được cũng là lúc cần log nhất. Nó cho đường dẫn `~/.dsh/logs/dsh.log` — nơi plugin ghi thay vì ghi ra màn hình, vì một dòng ghi thô sẽ đè lên khung TUI đang vẽ.
 >
@@ -100,7 +100,7 @@
 
 English | [中文](README.zh.md)
 
-DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
+DeepSeek Harness (`tad`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
 It uses an architecture where **everything is a plugin**, and is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
 
@@ -129,10 +129,10 @@ git clone https://github.com/deepseek-ai/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build
-pnpm dsh web
+pnpm tad web
 ```
 
-`pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
+`pnpm run build` prepares the repository artifacts. `pnpm tad web` uses those built artifacts without rebuilding.
 
 ## Community and support
 

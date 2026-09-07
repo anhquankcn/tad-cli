@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh",
-  "description": "dsh CLI: profile boot, plugin management, and the browser UI alias",
+  "description": "tad CLI: profile boot, plugin management, and the browser UI alias",
   "version": "0.1.1-rc.2",
   "publishConfig": {
     "access": "public"
@@ -12,7 +12,7 @@
   },
   "type": "module",
   "bin": {
-    "dsh": "lib/bin.js"
+    "tad": "lib/bin.js"
   },
   "files": [
     "lib/*.js",

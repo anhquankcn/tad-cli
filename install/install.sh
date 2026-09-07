@@ -93,8 +93,8 @@ pnpm build
 [ -f apps/cli/lib/bin.js ] || die "Build xong nhưng không thấy apps/cli/lib/bin.js."
 ok "build xong"
 
-# ── 4. Lệnh dsh ─────────────────────────────────────────────────────────────
-say "Cài lệnh dsh"
+# ── 4. Lệnh tad ─────────────────────────────────────────────────────────────
+say "Cài lệnh tad"
 
 BIN_DIR="${HOME}/.local/bin"
 mkdir -p "$BIN_DIR"
@@ -123,7 +123,7 @@ write_profile() {
   fi
   printf '%s\n' "$manifest" > "${dir}/package.json"
   # PHẢI dùng pnpm, không phải npm: `link:` là cú pháp của pnpm và npm từ chối
-  # thẳng với EUNSUPPORTEDPROTOCOL. `dsh plugin` cũng chuyển tiếp sang pnpm.
+  # thẳng với EUNSUPPORTEDPROTOCOL. `tad plugin` cũng chuyển tiếp sang pnpm.
   ( cd "$dir" && pnpm install --silent >/dev/null 2>&1 ) \
     || warn "pnpm install trong profile ${name} thất bại"
   ok "profile ${name}"
@@ -133,7 +133,7 @@ write_profile headless "$(cat <<EOF
 {
   "name": "dsh-profile-headless",
   "private": true,
-  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"] } }
+  "tad": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"] } }
 }
 EOF
 )"
@@ -144,7 +144,7 @@ write_profile tui "$(cat <<EOF
 {
   "name": "dsh-profile-tui",
   "private": true,
-  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "seekarkan"] } },
+  "tad": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "seekarkan"] } },
   "dependencies": { "seekarkan": "link:${INSTALL_DIR}/tui/seekarkan" }
 }
 EOF
@@ -170,8 +170,8 @@ fi
 # ── 7. Kiểm chứng ───────────────────────────────────────────────────────────
 say "Kiểm chứng"
 
-VERSION="$("${BIN_DIR}/dsh" --version 2>&1 | head -1)" || die "dsh --version không chạy."
-ok "dsh --version -> ${VERSION}"
+VERSION="$("${BIN_DIR}/dsh" --version 2>&1 | head -1)" || die "tad --version không chạy."
+ok "tad --version -> ${VERSION}"
 
 for p in headless tui; do
   if err="$("${BIN_DIR}/dsh" --profile "$p" --dump-config 2>&1 >/dev/null)"; then
@@ -188,12 +188,12 @@ cat <<EOF
    Còn hai việc phải làm bằng tay, vì chúng cần quyết định của bạn:
 
    1. Thêm route model vào ${DSH_HOME}/profiles/<tên>/cordis.patch.yml
-      Chưa có route thì dsh không gọi được model nào. Xem
+      Chưa có route thì tad không gọi được model nào. Xem
       install/README.md để biết khuôn tối thiểu.
 
    2. Điền khoá vào ${CRED}
 
-   Mở TUI:   SEEKARKAN_LANG=vi dsh --profile tui
+   Mở TUI:   SEEKARKAN_LANG=vi tad --profile tui
    Lưu ý biến ngôn ngữ KHÔNG phải TAD_LANG dù giao diện tên là TAD.
    Không đặt thì giao diện ra tiếng Trung.
 EOF

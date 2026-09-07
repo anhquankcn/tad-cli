@@ -14,12 +14,12 @@
 > **使用。**
 >
 > ```sh
-> dsh --profile headless "cau hoi"
-> SEEKARKAN_LANG=vi dsh --profile tui
-> dsh web
+> tad --profile headless "cau hoi"
+> SEEKARKAN_LANG=vi tad --profile tui
+> tad web
 > ```
 >
-> PowerShell 没有 `VAR=value 命令` 这种写法，需要单独设置变量：`$env:SEEKARKAN_LANG = 'vi'; dsh --profile tui`。
+> PowerShell 没有 `VAR=value 命令` 这种写法，需要单独设置变量：`$env:SEEKARKAN_LANG = 'vi'; tad --profile tui`。
 >
 > 语言变量是 `SEEKARKAN_LANG`，不是 `TAD_LANG`，尽管界面名为 TAD。不设置则界面显示中文。该变量只对 `--profile tui` 生效，且在加载时读取一次，改动后须重启。
 >
@@ -28,38 +28,38 @@
 > 前四步是**每台机器一次性搭建**；每一步都是下一步的前置条件，由服务端重新校验，因此必须按顺序执行。机器已注册则可跳过 `session machine`。
 >
 > ```sh
-> dsh login
-> dsh session link
-> dsh session machine --generate-fingerprint
-> dsh session workorder --title T --description D --repo R --checklist ...
+> tad login
+> tad session link
+> tad session machine --generate-fingerprint
+> tad session workorder --title T --description D --repo R --checklist ...
 > ```
 >
 > 中间两步只会打印一个 id 然后停下：审批绑定与审批开发机需要 `studio:machines:approve` 权限，而自行申报的人不应是审批的人。把 id 交给有权限的人执行 `--approve-id <id>`。machine token 由审批那一步生成且只显示一次，显示在他们那一侧，因此需要他们回传给你。
 >
 > 如何写出能通过价值与风险闸门的 work order，以及为什么三个风险等级中有两个无法运行：`install/WORKORDER.md`。
 >
-> 若你通过 SSH 登录到运行命令的机器，`dsh login` 无法完成：监听器位于远程机器的 `127.0.0.1`，而浏览器在你本地。改用 device flow，无需该机器上有浏览器：
+> 若你通过 SSH 登录到运行命令的机器，`tad login` 无法完成：监听器位于远程机器的 `127.0.0.1`，而浏览器在你本地。改用 device flow，无需该机器上有浏览器：
 >
 > ```sh
-> dsh login --device
+> tad login --device
 > ```
 >
 > 第五步是**每个会话**执行，因为 lease 仅存活 4 小时（上限 24 小时）：
 >
 > ```sh
-> dsh session register --workorder ID --satellite-link UUID --model-ref REF
+> tad session register --workorder ID --satellite-link UUID --model-ref REF
 > ```
 >
 > lease 过期后，在**同一个 work order** 上重跑该命令即可，无需新建 work order，也无需手动吊销。已过期的 lease 会在签发新 lease 的同一事务内被标记失效。
 >
-> 还有更省事的方式，不必记住三个 id：`dsh workorders` 列出可运行的 work order，`dsh session run <id>` 为其中一个取得 lease。
+> 还有更省事的方式，不必记住三个 id：`tad workorders` 列出可运行的 work order，`tad session run <id>` 为其中一个取得 lease。
 >
 > ```sh
-> dsh workorders
-> dsh session run <workorder_id>
+> tad workorders
+> tad session run <workorder_id>
 > ```
 >
-> 而 `dsh status` 一次检查整条链——诊断、登录、权限、绑定、开发机、work order、lease、Model Registry——指名当前断掉的那一环并给出修复命令。在猜测之前先跑它。
+> 而 `tad status` 一次检查整条链——诊断、登录、权限、绑定、开发机、work order、lease、Model Registry——指名当前断掉的那一环并给出修复命令。在猜测之前先跑它。
 
 > **诊断**一节最先打印，位于"未登录"短路之前，因为登录不上的时候恰恰最需要日志。它给出 `~/.dsh/logs/dsh.log` 的路径——插件写日志的地方，而不是写到屏幕上，因为一行裸写会覆盖正在绘制的 TUI 画面。
 >
@@ -100,7 +100,7 @@
 
 [English](README.md) | 中文
 
-DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
+DeepSeek Harness（`tad`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 
 它采用**一切皆插件**的架构，并由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
 
@@ -133,10 +133,10 @@ git clone https://github.com/deepseek-ai/deepseek-harness.git
 cd deepseek-harness
 pnpm install
 pnpm run build
-pnpm dsh web
+pnpm tad web
 ```
 
-`pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
+`pnpm run build` 会准备仓库产物。`pnpm tad web` 会直接使用这些已构建产物，不会重新构建。
 
 ## 社区与支持
 
