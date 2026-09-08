@@ -706,7 +706,14 @@ export async function runStatus(options: ArkanOptions): Promise<number> {
     : {
       label: 'log harness',
       value: `${logPath} — chưa có`,
-      problem: 'bản tad trước 2026-09-06 không ghi file này; cập nhật rồi chạy lại',
+      // The sink registers inside `boot()`, which only `tad --profile ...`
+      // triggers — `tad status` itself never calls it. So an absent file is
+      // the ordinary state for an install that has only run arkan commands
+      // (login, status, session ...) and never booted a profile, which is far
+      // more common than an old build. Naming just the stale-build cause sent
+      // a brand new install to "cập nhật" for nothing.
+      problem: 'bình thường nếu chưa chạy `tad --profile ...` lần nào; '
+        + 'nếu đã chạy rồi thì bản tad cũ hơn 2026-09-06 chưa có sink này',
     }]
 
   // The relay plugin is copied into each profile by hand, so profiles drift.
