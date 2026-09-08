@@ -1,16 +1,16 @@
 ﻿<#
-Cài TAD (arkan-dsh) lên một máy Windows mới.
+Cài TAD lên một máy Windows mới.
 
 Chạy được nhiều lần: bước nào đã xong thì bỏ qua, file cấu hình đã có thì sao
 lưu trước khi ghi đè. Không chạm tới credential thật bao giờ.
 
   .\install\install.ps1
-  .\install\install.ps1 -Dir D:\arkan-dsh
+  .\install\install.ps1 -Dir D:\tad-cli
   .\install\install.ps1 -SkipClone
 #>
 [CmdletBinding()]
 param(
-  [string] $Dir = (Join-Path $HOME 'arkan-dsh'),
+  [string] $Dir = (Join-Path $HOME 'tad-cli'),
   [switch] $SkipClone
 )
 
@@ -139,7 +139,7 @@ Write-Profile 'headless' @"
 {
   "name": "dsh-profile-headless",
   "private": true,
-  "tad": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"] } }
+  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"] } }
 }
 "@
 
@@ -150,7 +150,7 @@ Write-Profile 'tui' @"
 {
   "name": "dsh-profile-tui",
   "private": true,
-  "tad": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "seekarkan"] } },
+  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "seekarkan"] } },
   "dependencies": { "seekarkan": "link:$linkPath" }
 }
 "@

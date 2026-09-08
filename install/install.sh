@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Cài TAD (arkan-dsh) lên một máy Linux/macOS mới.
+# Cài TAD lên một máy Linux/macOS mới.
 #
 # Chạy được nhiều lần: bước nào đã xong thì bỏ qua, file cấu hình đã có thì
 # sao lưu trước khi ghi đè. Không chạm tới credential thật bao giờ.
 #
 #   ./install/install.sh                      # cài vào ~/arkan-dsh
-#   ./install/install.sh --dir /opt/arkan-dsh # chọn chỗ khác
+#   ./install/install.sh --dir /opt/tad-cli # chọn chỗ khác
 #   ./install/install.sh --skip-clone         # đã có mã nguồn sẵn
 set -euo pipefail
 
 REPO_URL="https://github.com/anhquankcn/tad-cli.git"
-INSTALL_DIR="${HOME}/arkan-dsh"
+INSTALL_DIR="${HOME}/tad-cli"
 DSH_HOME="${DSH_HOME:-${HOME}/.dsh}"
 SKIP_CLONE=0
 # Node 24 là NGƯỠNG CỨNG, không phải khuyến nghị: trên Node 22, tsdown rơi sang
@@ -98,13 +98,13 @@ say "Cài lệnh tad"
 
 BIN_DIR="${HOME}/.local/bin"
 mkdir -p "$BIN_DIR"
-cat > "${BIN_DIR}/dsh" <<EOF
+cat > "${BIN_DIR}/tad" <<EOF
 #!/bin/sh
 # Shim gọi TAD CLI từ bản đã build. Sửa mã nguồn xong phải chạy 'pnpm build'.
 exec node "${INSTALL_DIR}/apps/cli/lib/bin.js" "\$@"
 EOF
-chmod +x "${BIN_DIR}/dsh"
-ok "đã ghi ${BIN_DIR}/dsh"
+chmod +x "${BIN_DIR}/tad"
+ok "đã ghi ${BIN_DIR}/tad"
 case ":${PATH}:" in
   *":${BIN_DIR}:"*) ok "${BIN_DIR} đã có trên PATH" ;;
   *) warn "${BIN_DIR} CHƯA có trên PATH — thêm vào ~/.profile hoặc ~/.bashrc:"
@@ -133,7 +133,7 @@ write_profile headless "$(cat <<EOF
 {
   "name": "dsh-profile-headless",
   "private": true,
-  "tad": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"] } }
+  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"] } }
 }
 EOF
 )"
@@ -144,7 +144,7 @@ write_profile tui "$(cat <<EOF
 {
   "name": "dsh-profile-tui",
   "private": true,
-  "tad": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "seekarkan"] } },
+  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "seekarkan"] } },
   "dependencies": { "seekarkan": "link:${INSTALL_DIR}/tui/seekarkan" }
 }
 EOF
@@ -170,11 +170,11 @@ fi
 # ── 7. Kiểm chứng ───────────────────────────────────────────────────────────
 say "Kiểm chứng"
 
-VERSION="$("${BIN_DIR}/dsh" --version 2>&1 | head -1)" || die "tad --version không chạy."
+VERSION="$("${BIN_DIR}/tad" --version 2>&1 | head -1)" || die "tad --version không chạy."
 ok "tad --version -> ${VERSION}"
 
 for p in headless tui; do
-  if err="$("${BIN_DIR}/dsh" --profile "$p" --dump-config 2>&1 >/dev/null)"; then
+  if err="$("${BIN_DIR}/tad" --profile "$p" --dump-config 2>&1 >/dev/null)"; then
     ok "profile ${p} compose được"
   else
     # In nguyên văn lỗi. Đoán nguyên nhân ở đây chỉ khiến người ta đi sai hướng.
