@@ -159,4 +159,4 @@ sẽ xoá trắng màn hình mỗi lần vẽ lại. Bản vá khai ở `pnpm-wo
 — file `pnpm-workspace.yaml` lồng trong `tui/seekarkan/` bị pnpm bỏ qua.
 
 Sửa mã nguồn xong phải `pnpm build` thì lệnh `tad` mới đổi — shim trỏ vào bản đã
-build. Muốn thấy thay đổi ngay thì chạy `pnpm tad --profile ...` trong kho.
+build. Muốn thấy thay đổi ngay thì chạy `pnpm dsh --profile ...` trong kho.
